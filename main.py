@@ -233,16 +233,28 @@ def _delete_file_quiet(stored_name: str):
 # ==========================================
 # 🤖 ТЕЛЕГРАМ БОТ (Меню)
 # ==========================================
-DIV = "▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔"
+DIV = "▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔"
 HEADER_MAIN  = f"📚 *Щоденник Класу*\n{DIV}\nОбери розділ:"
 HEADER_SCHED = f"📆 *Розклад уроків*\n{DIV}\nОбери день:"
 
 def kb(*rows): return InlineKeyboardMarkup(list(rows))
 def _back(cb="go_main", label="◀️  Назад"): return InlineKeyboardButton(label, callback_data=cb)
 
-def kb_main():
+def kb_main(chat_type: str):
+    # В приватці можна web_app
+    if chat_type == ChatType.PRIVATE:
+        open_btn = InlineKeyboardButton(
+            "📱 Відкрити Щоденник",
+            web_app=WebAppInfo(url=WEB_APP_URL),
+        )
+    else:
+        open_btn = InlineKeyboardButton(
+            "🤖 Відкрити в боті",
+            url=START_WEBAPP,   # <- відкриває приватний чат з ботом
+        )
+
     return kb(
-        [InlineKeyboardButton("📱 Відкрити Щоденник", web_app=WebAppInfo(url=WEB_APP_URL))],
+        [open_btn],
         [InlineKeyboardButton("📆  Розклад",            callback_data="menu_schedule")],
         [InlineKeyboardButton("🔔  Підписка",           callback_data="menu_sub")],
         [InlineKeyboardButton("❓  Допомога",           callback_data="help")],
@@ -272,7 +284,12 @@ async def delete_msg(msg):
         pass
 
 async def go_main(q, ctx):
-    await q.edit_message_text(HEADER_MAIN, parse_mode="Markdown", reply_markup=kb_main())
+    chat_type = q.message.chat.type  # <- важливо
+    await q.edit_message_text(
+        HEADER_MAIN,
+        parse_mode="Markdown",
+        reply_markup=kb_main(chat_type),
+    )
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
@@ -282,6 +299,21 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not sub_get(chat.id):
         sub_add(chat.id, u.username or u.first_name, "private" if chat.type == "private" else "group", title)
 
+    chat_type = chat.type
+    payload = (ctx.args[0].strip().lower() if ctx.args else "")
+
+    # Якщо зайшли з групи по кнопці "Відкрити в боті" (deep-link)
+    if chat_type == ChatType.PRIVATE and payload == "webapp":
+        # Тут можна або одразу показати головне меню,
+        # або одразу кинути "HEADER_MAIN" (як у go_main)
+        await update.message.reply_text(
+            HEADER_MAIN,
+            parse_mode="Markdown",
+            reply_markup=kb_main(chat_type),
+        )
+        # В приватці я НЕ раджу видаляти старт-повідомлення
+        return
+
     greeting = (
         f"👋 Вітаємо, *{u.first_name}*!\n\n📚 *Щоденник Класу* — офіційний бот класу.\n{DIV}\n"
         f"Тут зберігається домашнє завдання,\nрозклад уроків і нагадування.\n\nОбери розділ:"
@@ -289,11 +321,24 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"📚 *Щоденник Класу* підключено!\n{DIV}\nНагадування надходитимуть щодня о *09:00*."
     )
 
-    await update.message.reply_text(greeting, parse_mode="Markdown", reply_markup=kb_main())
-    await delete_msg(update.message)
+    await update.message.reply_text(
+        greeting,
+        parse_mode="Markdown",
+        reply_markup=kb_main(chat_type),
+    )
+
+    # Видаляти повідомлення в групі ок, у приватці — краще не чіпати
+    if chat_type != ChatType.PRIVATE:
+        await delete_msg(update.message)
 
 async def cmd_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(HEADER_MAIN, parse_mode="Markdown", reply_markup=kb_main())
+    chat_type = update.effective_chat.type
+
+    await update.message.reply_text(
+        HEADER_MAIN,
+        parse_mode="Markdown",
+        reply_markup=kb_main(chat_type),
+    )
     await delete_msg(update.message)
 
 async def cmd_schedule(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
