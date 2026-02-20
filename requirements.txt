@@ -1,1 +1,4 @@
-python-telegram-bot[job-queue]==21.6
+fastapi
+uvicorn
+python-telegram-bot[job-queue]
+python-multipart
