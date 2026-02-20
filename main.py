@@ -20,8 +20,9 @@ from fastapi import FastAPI, Request, UploadFile, File
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from telegram import (
     Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup,
-    WebAppInfo, MenuButtonWebApp, ChatType
+    WebAppInfo, MenuButtonWebApp
 )
+from telegram.constants import ChatType
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # ==========================================
@@ -36,11 +37,9 @@ WEB_APP_URL = os.getenv("WEB_APP_URL", "https://tviy-bot.onrender.com")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 UPLOAD_DIR = "uploads"
+START_WEBAPP = ""  # заповнюється в lifespan
 MAX_UPLOAD_MB = 60
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
-
-# Заповнюється в lifespan після ініціалізації бота (потрібне ім'я юзернейму)
-START_WEBAPP = ""
 
 logging.basicConfig(format="%(asctime)s [%(levelname)s] %(name)s: %(message)s", level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -508,7 +507,6 @@ async def lifespan(app: FastAPI):
         jq.run_daily(job_cleanup, time=time(hour=0, minute=5, tzinfo=KYIV_TZ))
 
         await ptb_app.initialize()
-        # Тепер знаємо username бота — формуємо deep-link для групових кнопок
         global START_WEBAPP
         START_WEBAPP = f"https://t.me/{ptb_app.bot.username}?start=webapp"
         await ptb_app.start()
