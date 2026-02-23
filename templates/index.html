@@ -1565,6 +1565,71 @@
             overflow-wrap: break-word;
             word-break: break-word;
         }
+
+        /* ═══════════════════════════════════════
+           ВАЖЛИВЕ ЗАВДАННЯ
+        ═══════════════════════════════════════ */
+        .hw-card.important {
+            border: 1.5px solid rgba(255, 69, 58, .5);
+            background: linear-gradient(135deg,
+                rgba(255, 69, 58, .12) 0%,
+                var(--card) 55%);
+        }
+        .hw-card.important::after { color: #ff453a }
+        .imp-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            font-weight: 700;
+            color: #ff453a;
+            letter-spacing: .5px;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        /* Тогл у формах */
+        .imp-toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+        .imp-toggle-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 15px;
+            font-weight: 600;
+        }
+        .ios-switch {
+            position: relative; width: 51px; height: 31px; flex-shrink: 0;
+        }
+        .ios-switch input { opacity: 0; width: 0; height: 0; position: absolute }
+        .ios-switch-track {
+            position: absolute; inset: 0; border-radius: 999px;
+            background: rgba(118,118,128,.32);
+            transition: background .25s;
+        }
+        .ios-switch input:checked ~ .ios-switch-track { background: #ff453a }
+        .ios-switch-thumb {
+            position: absolute; top: 2px; left: 2px;
+            width: 27px; height: 27px; border-radius: 50%;
+            background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35);
+            transition: transform .25s cubic-bezier(.34,1.56,.64,1);
+        }
+        .ios-switch input:checked ~ .ios-switch-thumb { transform: translateX(20px) }
+        /* Бейдж у деталях */
+        .detail-imp-badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: rgba(255,69,58,.13);
+            border: 1px solid rgba(255,69,58,.38);
+            border-radius: 8px; padding: 6px 12px;
+            font-size: 13px; font-weight: 700; color: #ff453a;
+            letter-spacing: .3px; margin-bottom: 12px;
+        }
+
     </style>
 </head>
 
@@ -1654,6 +1719,21 @@
                 <div class="file-preview-list" id="add-files-preview"></div>
             </div>
 
+
+            <div class="modal-block">
+                <div class="imp-toggle-row" onclick="document.getElementById('add-important').click()">
+                    <div class="imp-toggle-label">
+                        <span style="font-size:20px">🔴</span>
+                        Важливе завдання
+                    </div>
+                    <label class="ios-switch" onclick="event.stopPropagation()">
+                        <input type="checkbox" id="add-important">
+                        <div class="ios-switch-track"></div>
+                        <div class="ios-switch-thumb"></div>
+                    </label>
+                </div>
+            </div>
+
             <div class="main-btn" id="btn-add-save" onclick="submitHW()">
                 <span class="btn-spinner"></span>
                 <span id="ico-save-add"></span>
@@ -1670,6 +1750,7 @@
         </div>
         <div class="modal-content">
             <div class="modal-subj" id="modal-subj"></div>
+            <div id="detail-imp-badge" class="detail-imp-badge" style="display:none">🔴 Важливе завдання</div>
 
             <!-- meta row -->
             <div class="detail-meta">
@@ -1745,6 +1826,21 @@
                     <span id="ico-plus-file"></span> Додати файли
                 </div>
                 <div class="file-preview-list" id="edit-files-preview"></div>
+            </div>
+
+
+            <div class="modal-block">
+                <div class="imp-toggle-row" onclick="document.getElementById('edit-important').click()">
+                    <div class="imp-toggle-label">
+                        <span style="font-size:20px">🔴</span>
+                        Важливе завдання
+                    </div>
+                    <label class="ios-switch" onclick="event.stopPropagation()">
+                        <input type="checkbox" id="edit-important">
+                        <div class="ios-switch-track"></div>
+                        <div class="ios-switch-thumb"></div>
+                    </label>
+                </div>
             </div>
 
             <div class="main-btn" id="btn-edit-save" onclick="submitEdit()">
@@ -2581,6 +2677,8 @@
         function fillDetailModal(task) {
             currentTask = task;
             document.getElementById('modal-subj').innerText = task.subject;
+            const impBadgeEl = document.getElementById('detail-imp-badge');
+            if (impBadgeEl) impBadgeEl.style.display = task.is_important ? 'inline-flex' : 'none';
             document.getElementById('modal-desc').innerText = task.description;
             renderLinks(task.description || '', document.getElementById('modal-links'));
 
@@ -2627,6 +2725,7 @@
             document.getElementById('add-desc').value = '';
             addFilesList = []; renderFP('add', []);
             addDateTouched = false;
+            document.getElementById('add-important').checked = false;
 
             const cur = getCurrentSubject();
             if (cur) {
@@ -2669,7 +2768,7 @@
                 await fetch('/api/hw_add', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ date, subject: subj, description: desc, author, author_id, attachments: uploaded })
+                    body: JSON.stringify({ date, subject: subj, description: desc, author, author_id, attachments: uploaded, is_important: document.getElementById('add-important').checked ? 1 : 0 })
                 });
 
                 tg.showAlert("✅ Завдання додано!");
@@ -2775,6 +2874,7 @@
             editDate.onchange = () => { editDateTouched = true };
 
             document.getElementById('edit-desc').value = currentTask.description;
+            document.getElementById('edit-important').checked = !!currentTask.is_important;
 
             editAttList = (currentTask.attachments || []).map(a => ({ ...a, _isNew: false }));
             editNewFiles = []; renderEditAtt(); renderFP('edit', []);
@@ -2813,7 +2913,7 @@
                 await fetch('/api/hw_update', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: currentTask.id, subject, date, description: desc, attachments: finalAtts })
+                    body: JSON.stringify({ id: currentTask.id, subject, date, description: desc, attachments: finalAtts, is_important: document.getElementById('edit-important').checked ? 1 : 0 })
                 });
 
                 closeModalById('edit-hw-modal');
@@ -2934,13 +3034,13 @@
 
         function createHWCard(task, dateKey) {
             const card = document.createElement('div');
-            card.className = 'hw-card';
-            card.dataset.id = String(task.id);
             const isNew = newlyAddedIds.has(String(task.id));
-            if (isNew) card.classList.add('new-task');
+            card.className = 'hw-card' + (isNew ? ' new-task' : '') + (task.is_important ? ' important' : '');
+            card.dataset.id = String(task.id);
             card.style.animation = `slideUpFade 0.45s cubic-bezier(0.2,0.8,0.2,1) forwards ${isNew ? 0 : 0.02}s`;
             const clip = (task.attachments?.length) ? " 📎" : "";
-            card.innerHTML = `<div class="subj-title">${escapeHTML(task.subject)}${clip}</div><div class="hw-short">${escapeHTML(task.description)}</div>`;
+            const impB = task.is_important ? '<div class="imp-badge">🔴 Важливе</div>' : '';
+            card.innerHTML = `${impB}<div class="subj-title">${escapeHTML(task.subject)}${clip}</div><div class="hw-short">${escapeHTML(task.description)}</div>`;
             card.onclick = () => openModal('detail-modal', () => fillDetailModal({ ...task, date: dateKey }));
             return card;
         }
@@ -2948,7 +3048,8 @@
         function reconcileHWList(dateKey, opts = {}) {
             const { forceRebuild = false } = opts;
             const c = document.getElementById('hw-container');
-            const tasks = hwData[dateKey]?.tasks || [];
+            const raw = hwData[dateKey]?.tasks || [];
+            const tasks = [...raw.filter(t => t.is_important), ...raw.filter(t => !t.is_important)];
             if (!tasks.length) {
                 if (!c.dataset.emptyShown || forceRebuild) {
                     c.dataset.emptyShown = "1";
@@ -2967,10 +3068,14 @@
                 const id = String(t.id), found = existing.get(id);
                 if (!found) c.appendChild(createHWCard(t, dateKey));
                 else {
+                    found.classList.toggle('important', !!t.is_important);
                     const clip = (t.attachments?.length) ? " 📎" : "";
-                    const titleText = `${t.subject}${clip}`;
+                    const impB = t.is_important ? '<div class="imp-badge">🔴 Важливе</div>' : '';
                     const te = found.querySelector('.subj-title'), de = found.querySelector('.hw-short');
-                    if (te && te.textContent !== titleText) te.textContent = titleText;
+                    let ib = found.querySelector('.imp-badge');
+                    if (t.is_important && !ib) { found.insertAdjacentHTML('afterbegin', '<div class="imp-badge">🔴 Важливе</div>'); }
+                    else if (!t.is_important && ib) ib.remove();
+                    if (te && te.textContent !== `${t.subject}${clip}`) te.textContent = `${t.subject}${clip}`;
                     if (de && de.textContent !== t.description) de.textContent = t.description;
                     found.onclick = () => openModal('detail-modal', () => fillDetailModal({ ...t, date: dateKey }));
                 }
@@ -3087,18 +3192,18 @@
 
             const list = document.getElementById('all-hw-list');
             list.innerHTML = '';
-            allHWData
-                .filter(t => isDate ? t.date === currentActiveFilter : t.subject === currentActiveFilter)
-                .forEach((task, i) => {
+            const _filtered = allHWData.filter(t => isDate ? t.date === currentActiveFilter : t.subject === currentActiveFilter);
+            const _sorted = [..._filtered.filter(t => t.is_important), ..._filtered.filter(t => !t.is_important)];
+            _sorted.forEach((task, i) => {
                     const card = document.createElement('div');
-                    card.className = `hw-card ${newlyAddedIds.has(String(task.id)) ? 'new-task' : ''}`;
+                    card.className = `hw-card${newlyAddedIds.has(String(task.id)) ? ' new-task' : ''}${task.is_important ? ' important' : ''}`;
                     card.style.animation = `slideUpFade .4s forwards ${i * 0.05}s`;
                     const clip = (task.attachments?.length) ? " 📎" : "";
                     const titleText = isDate
                         ? task.subject
                         : new Date(task.date + "T00:00:00").toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
-
-                    card.innerHTML = `<div class="subj-title">${escapeHTML(titleText)}${clip}</div><div class="hw-short">${escapeHTML(task.description)}</div>`;
+                    const impB = task.is_important ? '<div class="imp-badge">🔴 Важливе</div>' : '';
+                    card.innerHTML = `${impB}<div class="subj-title">${escapeHTML(titleText)}${clip}</div><div class="hw-short">${escapeHTML(task.description)}</div>`;
                     card.onclick = () => openModal('detail-modal', () => fillDetailModal(task));
                     list.appendChild(card);
                 });
@@ -3109,7 +3214,8 @@
             const list = document.getElementById('all-hw-list');
             list.innerHTML = '';
 
-            const tasks = allHWData.filter(t => isDate ? t.date === currentActiveFilter : t.subject === currentActiveFilter);
+            const _raw = allHWData.filter(t => isDate ? t.date === currentActiveFilter : t.subject === currentActiveFilter);
+            const tasks = [..._raw.filter(t => t.is_important), ..._raw.filter(t => !t.is_important)];
 
             if (!tasks.length) {
                 list.innerHTML = '<div class="empty-state">Немає завдань</div>';
@@ -3118,15 +3224,14 @@
 
             tasks.forEach((task, i) => {
                 const card = document.createElement('div');
-                card.className = `hw-card ${newlyAddedIds.has(String(task.id)) ? 'new-task' : ''}`;
+                card.className = `hw-card${newlyAddedIds.has(String(task.id)) ? ' new-task' : ''}${task.is_important ? ' important' : ''}`;
                 card.style.animation = `slideUpFade .4s forwards ${i * 0.05}s`;
-
                 const clip = (task.attachments?.length) ? " 📎" : "";
                 const titleText = isDate
                     ? task.subject
                     : new Date(task.date + "T00:00:00").toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
-
-                card.innerHTML = `<div class="subj-title">${escapeHTML(titleText)}${clip}</div><div class="hw-short">${escapeHTML(task.description)}</div>`;
+                const impBL = task.is_important ? '<div class="imp-badge">🔴 Важливе</div>' : '';
+                card.innerHTML = `${impBL}<div class="subj-title">${escapeHTML(titleText)}${clip}</div><div class="hw-short">${escapeHTML(task.description)}</div>`;
                 card.onclick = () => openModal('detail-modal', () => fillDetailModal(task));
                 list.appendChild(card);
             });
