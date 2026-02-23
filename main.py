@@ -107,11 +107,6 @@ def init_db():
     if not DATABASE_URL:
         return
     with dbc() as c:
-        # Додаємо колонку is_important якщо ще немає (міграція)
-        try:
-            c.execute("ALTER TABLE homework ADD COLUMN is_important INTEGER DEFAULT 0")
-        except Exception:
-            pass  # вже існує
         c.execute("""
             CREATE TABLE IF NOT EXISTS homework(
                 id SERIAL PRIMARY KEY,
@@ -121,8 +116,7 @@ def init_db():
                 author_id BIGINT,
                 author_name TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_done INTEGER DEFAULT 0,
-                is_important INTEGER DEFAULT 0
+                is_done INTEGER DEFAULT 0
             )
         """)
         c.execute("""
@@ -203,10 +197,10 @@ def _attachments_for_hw_ids(ids: List[int]) -> Dict[int, List[Dict[str, Any]]]:
 def hw_for_date_formatted(d: str):
     with dbc() as c:
         rows = c.execute("""
-            SELECT id, subject, description, due_date, author_name, author_id, is_important
+            SELECT id, subject, description, due_date, author_name, author_id
             FROM homework
             WHERE due_date=%s
-            ORDER BY is_important DESC, subject
+            ORDER BY subject
         """, (d,)).fetchall()
 
     ids = [int(r["id"]) for r in rows]
@@ -218,7 +212,6 @@ def hw_for_date_formatted(d: str):
         "description": r["description"],
         "author": r["author_name"] or "—",
         "author_id": r["author_id"],
-        "is_important": int(r["is_important"] or 0),
         "attachments": att_map.get(int(r["id"]), [])
     } for r in rows]
 
@@ -454,13 +447,19 @@ async def cb_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def job_morning(ctx: ContextTypes.DEFAULT_TYPE):
     today = today_kyiv()
+    # Субота (weekday=5) — не турбуємо
+    if today.weekday() == 5:
+        log.info("📵 Субота — ранковий дайджест пропущено")
+        return
+
     rows = hw_for_date_formatted(today.isoformat())
     dn = day_name(today)
     if rows:
         text = f"☀️ *Доброго ранку!*\n📅 *{DAYS_UA[today.weekday()]}, {today.strftime('%d.%m')}*\n{DIV}\n\n"
         for r in rows:
             clip = "📎" if r.get("attachments") else ""
-            text += f"╭─ {ei(r['subject'])} *{r['subject']}* {clip}\n│  📋 {r['description']}\n╰─ 👤 {r['author']}\n\n"
+            imp  = "🔴 " if r.get("is_important") else ""
+            text += f"╭─ {imp}{ei(r['subject'])} *{r['subject']}* {clip}\n│  📋 {r['description']}\n╰─ 👤 {r['author']}\n\n"
     else:
         text = f"☀️ *Доброго ранку!*\n\n📭 На сьогодні (*{dn}*) Д/З немає 🎉\nВідпочивай!"
 
@@ -470,6 +469,43 @@ async def job_morning(ctx: ContextTypes.DEFAULT_TYPE):
             await ctx.bot.send_message(chat_id, text, parse_mode="Markdown")
         except Exception as ex:
             log.warning("Reminder failed %s: %s", chat_id, ex)
+
+
+async def job_sunday_evening(ctx: ContextTypes.DEFAULT_TYPE):
+    """Неділя 18:00 — що задали на понеділок + важливі позначки."""
+    today = today_kyiv()
+    # Страховка: запускається лише в неділю
+    if today.weekday() != 6:
+        return
+
+    tomorrow = today + timedelta(days=1)   # понеділок
+    rows = hw_for_date_formatted(tomorrow.isoformat())
+    dn = day_name(tomorrow)
+
+    if rows:
+        has_important = any(r.get("is_important") for r in rows)
+        header = (
+            f"📋 *Д/З на завтра — {dn}, {tomorrow.strftime('%d.%m')}*\n{DIV}\n\n"
+        )
+        if has_important:
+            header += "⚠️ *Є важливі завдання!*\n\n"
+        text = header
+        for r in rows:
+            clip = "📎" if r.get("attachments") else ""
+            imp  = "🔴 " if r.get("is_important") else ""
+            text += f"╭─ {imp}{ei(r['subject'])} *{r['subject']}* {clip}\n│  📋 {r['description']}\n╰─ 👤 {r['author']}\n\n"
+    else:
+        text = (
+            f"📋 *Д/З на завтра — {dn}, {tomorrow.strftime('%d.%m')}*\n{DIV}\n\n"
+            f"📭 На понеділок Д/З немає 🎉\nГарного відпочинку!"
+        )
+
+    for rec in sub_all():
+        chat_id = rec["chat_id"]
+        try:
+            await ctx.bot.send_message(chat_id, text, parse_mode="Markdown")
+        except Exception as ex:
+            log.warning("Sunday reminder failed %s: %s", chat_id, ex)
 
 async def job_cleanup(ctx: ContextTypes.DEFAULT_TYPE):
     n = hw_cleanup()
@@ -508,8 +544,9 @@ async def lifespan(app: FastAPI):
         ptb_app.add_handler(CallbackQueryHandler(cb_help,           pattern="^help$"))
 
         jq = ptb_app.job_queue
-        jq.run_daily(job_morning, time=time(hour=9, minute=0, tzinfo=KYIV_TZ))
-        jq.run_daily(job_cleanup, time=time(hour=0, minute=5, tzinfo=KYIV_TZ))
+        jq.run_daily(job_morning,         time=time(hour=9,  minute=0,  tzinfo=KYIV_TZ))
+        jq.run_daily(job_sunday_evening,   time=time(hour=18, minute=0,  tzinfo=KYIV_TZ))
+        jq.run_daily(job_cleanup,          time=time(hour=0,  minute=5,  tzinfo=KYIV_TZ))
 
         await ptb_app.initialize()
         await ptb_app.start()
@@ -555,10 +592,10 @@ async def get_hw_all_api():
         return []
     with dbc() as c:
         rows = c.execute("""
-            SELECT id, subject, description, author_name, author_id, due_date, is_important
+            SELECT id, subject, description, author_name, author_id, due_date
             FROM homework
             WHERE due_date >= %s
-            ORDER BY due_date, is_important DESC, subject
+            ORDER BY due_date, subject
         """, (today,)).fetchall()
 
     ids = [int(r["id"]) for r in rows]
@@ -571,7 +608,6 @@ async def get_hw_all_api():
         "author": r["author_name"] or "—",
         "author_id": r["author_id"],
         "date": r["due_date"],
-        "is_important": int(r["is_important"] or 0),
         "attachments": att_map.get(int(r["id"]), [])
     } for r in rows]
 
@@ -617,14 +653,13 @@ async def api_add_hw(request: Request):
     author = data.get("author", "Mini App")
     author_id = data.get("author_id")
     attachments = data.get("attachments") or []
-    is_important = int(data.get("is_important") or 0)
 
     if subject and desc and due:
         with dbc() as c:
             cur = c.execute("""
-                INSERT INTO homework(subject, description, due_date, author_name, author_id, is_important)
-                VALUES(%s,%s,%s,%s,%s,%s) RETURNING id
-            """, (subject, desc, due, author, author_id, is_important))
+                INSERT INTO homework(subject, description, due_date, author_name, author_id)
+                VALUES(%s,%s,%s,%s,%s) RETURNING id
+            """, (subject, desc, due, author, author_id))
             hw_id = cur.fetchone()["id"]
 
             for a in attachments:
@@ -670,7 +705,6 @@ async def api_update_hw(request: Request):
     due = data.get("date")
     desc = data.get("description")
     attachments = data.get("attachments")
-    is_important = int(data.get("is_important") or 0)
 
     if not hw_id:
         return {"status": "error", "message": "No ID provided"}
@@ -680,9 +714,9 @@ async def api_update_hw(request: Request):
     with dbc() as c:
         c.execute("""
             UPDATE homework
-            SET subject=%s, due_date=%s, description=%s, is_important=%s
+            SET subject=%s, due_date=%s, description=%s
             WHERE id=%s
-        """, (subject, due, desc, is_important, hw_id))
+        """, (subject, due, desc, hw_id))
 
         if attachments is not None:
             kept_names = {a.get("stored_name") for a in (attachments or []) if a.get("stored_name")}
