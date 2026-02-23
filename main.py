@@ -22,6 +22,7 @@ from telegram import (
     Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup,
     WebAppInfo, MenuButtonWebApp
 )
+from telegram.constants import ChatType
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # ==========================================
@@ -32,10 +33,11 @@ if not TOKEN:
     log = logging.getLogger(__name__)
     log.warning("❌ BOT_TOKEN не задано.")
 
-WEB_APP_URL   = os.getenv("WEB_APP_URL",   "https://tviy-bot.onrender.com")
-WEBHOOK_URL   = os.getenv("WEBHOOK_URL",   "")   # напр. https://tviy-bot.onrender.com
-WEBHOOK_PATH  = "/webhook/telegram"
-DATABASE_URL  = os.getenv("DATABASE_URL")
+WEB_APP_URL  = os.getenv("WEB_APP_URL",  "https://tviy-bot.onrender.com")
+WEBHOOK_URL  = os.getenv("WEBHOOK_URL",  "")  # задати на Render: те саме що WEB_APP_URL
+WEBHOOK_PATH = "/webhook/telegram"
+DATABASE_URL = os.getenv("DATABASE_URL")
+START_WEBAPP = ""  # заповнюється в lifespan після ініціалізації бота
 
 UPLOAD_DIR = "uploads"
 MAX_UPLOAD_MB = 60
@@ -449,13 +451,19 @@ async def cb_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def job_morning(ctx: ContextTypes.DEFAULT_TYPE):
     today = today_kyiv()
+    # Субота і неділя — не турбуємо зранку
+    if today.weekday() in (5, 6):
+        log.info("📵 Вихідний — ранковий дайджест пропущено")
+        return
+
     rows = hw_for_date_formatted(today.isoformat())
     dn = day_name(today)
     if rows:
         text = f"☀️ *Доброго ранку!*\n📅 *{DAYS_UA[today.weekday()]}, {today.strftime('%d.%m')}*\n{DIV}\n\n"
         for r in rows:
             clip = "📎" if r.get("attachments") else ""
-            text += f"╭─ {ei(r['subject'])} *{r['subject']}* {clip}\n│  📋 {r['description']}\n╰─ 👤 {r['author']}\n\n"
+            imp  = "🔴 " if r.get("is_important") else ""
+            text += f"╭─ {imp}{ei(r['subject'])} *{r['subject']}* {clip}\n│  📋 {r['description']}\n╰─ 👤 {r['author']}\n\n"
     else:
         text = f"☀️ *Доброго ранку!*\n\n📭 На сьогодні (*{dn}*) Д/З немає 🎉\nВідпочивай!"
 
@@ -465,6 +473,33 @@ async def job_morning(ctx: ContextTypes.DEFAULT_TYPE):
             await ctx.bot.send_message(chat_id, text, parse_mode="Markdown")
         except Exception as ex:
             log.warning("Reminder failed %s: %s", chat_id, ex)
+
+
+async def job_sunday_evening(ctx: ContextTypes.DEFAULT_TYPE):
+    """Неділя 18:00 — Д/З на понеділок + важливі позначки."""
+    today = today_kyiv()
+    if today.weekday() != 6:
+        return
+    tomorrow = today + timedelta(days=1)
+    rows = hw_for_date_formatted(tomorrow.isoformat())
+    dn = day_name(tomorrow)
+    if rows:
+        has_important = any(r.get("is_important") for r in rows)
+        text = f"📋 *Д/З на завтра — {dn}, {tomorrow.strftime('%d.%m')}*\n{DIV}\n\n"
+        if has_important:
+            text += "⚠️ *Є важливі завдання!*\n\n"
+        for r in rows:
+            clip = "📎" if r.get("attachments") else ""
+            imp  = "🔴 " if r.get("is_important") else ""
+            text += f"╭─ {imp}{ei(r['subject'])} *{r['subject']}* {clip}\n│  📋 {r['description']}\n╰─ 👤 {r['author']}\n\n"
+    else:
+        text = (f"📋 *Д/З на завтра — {dn}, {tomorrow.strftime('%d.%m')}*\n{DIV}\n\n"
+                f"📭 На понеділок Д/З немає 🎉\nГарного відпочинку!")
+    for rec in sub_all():
+        try:
+            await ctx.bot.send_message(rec["chat_id"], text, parse_mode="Markdown")
+        except Exception as ex:
+            log.warning("Sunday reminder failed %s: %s", rec["chat_id"], ex)
 
 async def job_cleanup(ctx: ContextTypes.DEFAULT_TYPE):
     n = hw_cleanup()
@@ -504,24 +539,29 @@ async def lifespan(app: FastAPI):
 
         jq = ptb_app.job_queue
         jq.run_daily(job_morning,       time=time(hour=9,  minute=0, tzinfo=KYIV_TZ))
+        jq.run_daily(job_sunday_evening,time=time(hour=18, minute=0, tzinfo=KYIV_TZ))
         jq.run_daily(job_cleanup,       time=time(hour=0,  minute=5, tzinfo=KYIV_TZ))
 
         await ptb_app.initialize()
+
+        # Тепер знаємо username бота
+        global START_WEBAPP
+        START_WEBAPP = f"https://t.me/{ptb_app.bot.username}?start=webapp"
+
         await ptb_app.start()
 
         if WEBHOOK_URL:
-            # ── WEBHOOK режим (продакшн Render) ──────────────────────────
-            # Знімаємо старий webhook і скидаємо накопичені апдейти
+            # ── Webhook режим (Render продакшн) ──────────────────────────
             await ptb_app.bot.delete_webhook(drop_pending_updates=True)
             wh_full = WEBHOOK_URL.rstrip("/") + WEBHOOK_PATH
             await ptb_app.bot.set_webhook(wh_full)
-            log.info("🔗 Webhook встановлено: %s", wh_full)
+            log.info("🔗 Webhook: %s", wh_full)
         else:
-            # ── POLLING режим (локальна розробка) ────────────────────────
+            # ── Polling режим (локальна розробка) ────────────────────────
             await ptb_app.updater.start_polling(drop_pending_updates=True)
-            log.info("🔄 Polling режим (локально)")
+            log.info("🔄 Polling (локально)")
 
-        log.info("🚀 Telegram Бот запущено!")
+        log.info("🚀 Бот запущено!")
 
     yield
 
