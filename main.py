@@ -464,18 +464,22 @@ async def _broadcast(bot, text: str):
             log.warning("Broadcast failed %s: %s", rec["chat_id"], ex)
 
 
+# ==========================================
+# ⏰ JOBS (ВИПРАВЛЕНО)
+# ==========================================
+
 async def job_morning(ctx: ContextTypes.DEFAULT_TYPE):
     """Пн–Пт 09:00 — розклад на сьогодні + список Д/З."""
     today = today_kyiv()
-    if today.weekday() >= 5:          # сб=5, нд=6 — мовчимо
+    if today.weekday() >= 5:
         return
 
     dn = DAYS_UA[today.weekday()]
     subjects = SCHEDULE.get(dn, [])
 
-    # Блок розкладу
     sched_lines = ""
     lesson_idx = 0
+
     for num, start, end in BELLS:
         if num == 0:
             sched_lines += f"   ☕ Перерва {start}–{end}\n"
@@ -483,36 +487,33 @@ async def job_morning(ctx: ContextTypes.DEFAULT_TYPE):
             if lesson_idx < len(subjects):
                 s = subjects[lesson_idx]
                 sched_lines += (
-    f"╭─ *{num}.* {ei(s)} {s}\n"
-    f"╰─ {start}–{end}\n"
-)
+                    f"╭─ *{num}.* {ei(s)} {s}\n"
+                    f"╰─ {start}–{end}\n"
+                )
                 lesson_idx += 1
 
-    text = f"☀️ *Доброго ранку!*
+    text = f"""☀️ *Доброго ранку!*
 📅 *{dn}, {today.strftime('%d.%m')}*
 {DIV}
 
-"
-    text += f"📆 *Розклад на сьогодні:*
+📆 *Розклад на сьогодні:*
 {sched_lines}
-"
+"""
 
-    # Блок Д/З
     rows = hw_for_date_formatted(today.isoformat())
+
     if rows:
-        text += f"📚 *Д/З на сьогодні:*
-"
+        text += "📚 *Д/З на сьогодні:*\n"
         for r in rows:
             imp  = "🔴 " if r.get("is_important") else ""
             clip = " 📎" if r.get("attachments") else ""
-            text += f"╭─ {imp}{ei(r['subject'])} *{r['subject']}*{clip}
-│  📋 {r['description']}
-╰─ 👤 {r['author']}
-
-"
+            text += (
+                f"╭─ {imp}{ei(r['subject'])} *{r['subject']}*{clip}\n"
+                f"│  📋 {r['description']}\n"
+                f"╰─ 👤 {r['author']}\n\n"
+            )
     else:
-        text += f"📭 Д/З на сьогодні немає 🎉
-"
+        text += "📭 Д/З на сьогодні немає 🎉\n"
 
     await _broadcast(ctx.bot, text)
 
@@ -520,70 +521,72 @@ async def job_morning(ctx: ContextTypes.DEFAULT_TYPE):
 async def job_evening(ctx: ContextTypes.DEFAULT_TYPE):
     """Пн–Пт 18:00 — тільки важливе Д/З на завтра."""
     today = today_kyiv()
-    if today.weekday() >= 5:          # сб, нд — мовчимо
+    if today.weekday() >= 5:
         return
 
     tomorrow = today + timedelta(days=1)
-    # Пропускаємо вихідні (якщо завтра сб або нд)
     if tomorrow.weekday() >= 5:
         return
 
     rows = hw_for_date_formatted(tomorrow.isoformat())
     important = [r for r in rows if r.get("is_important")]
     if not important:
-        return  # немає важливого — мовчимо
+        return
 
     dn = DAYS_UA[tomorrow.weekday()]
-    text = f"🔴 *Важливе Д/З на завтра — {dn}, {tomorrow.strftime('%d.%m')}*
+
+    text = f"""🔴 *Важливе Д/З на завтра — {dn}, {tomorrow.strftime('%d.%m')}*
 {DIV}
 
-"
+"""
+
     for r in important:
         clip = " 📎" if r.get("attachments") else ""
-        text += f"╭─ {ei(r['subject'])} *{r['subject']}*{clip}
-│  📋 {r['description']}
-╰─ 👤 {r['author']}
-
-"
+        text += (
+            f"╭─ {ei(r['subject'])} *{r['subject']}*{clip}\n"
+            f"│  📋 {r['description']}\n"
+            f"╰─ 👤 {r['author']}\n\n"
+        )
 
     await _broadcast(ctx.bot, text)
 
 
 async def job_sunday_evening(ctx: ContextTypes.DEFAULT_TYPE):
-    """Нд 18:00 — всі Д/З на понеділок + позначка важливих."""
+    """Нд 18:00 — всі Д/З на понеділок."""
     today = today_kyiv()
     if today.weekday() != 6:
         return
 
-    tomorrow = today + timedelta(days=1)   # понеділок
+    tomorrow = today + timedelta(days=1)
     rows = hw_for_date_formatted(tomorrow.isoformat())
     dn = DAYS_UA[tomorrow.weekday()]
 
     if rows:
         has_imp = any(r.get("is_important") for r in rows)
-        text = f"📋 *Д/З на завтра — {dn}, {tomorrow.strftime('%d.%m')}*
+
+        text = f"""📋 *Д/З на завтра — {dn}, {tomorrow.strftime('%d.%m')}*
 {DIV}
 
-"
-        if has_imp:
-            text += "⚠️ *Є важливі завдання!*
+"""
 
-"
+        if has_imp:
+            text += "⚠️ *Є важливі завдання!*\n\n"
+
         for r in rows:
             imp  = "🔴 " if r.get("is_important") else ""
             clip = " 📎" if r.get("attachments") else ""
-            text += f"╭─ {imp}{ei(r['subject'])} *{r['subject']}*{clip}
-│  📋 {r['description']}
-╰─ 👤 {r['author']}
-
-"
+            text += (
+                f"╭─ {imp}{ei(r['subject'])} *{r['subject']}*{clip}\n"
+                f"│  📋 {r['description']}\n"
+                f"╰─ 👤 {r['author']}\n\n"
+            )
     else:
-        text = (f"📋 *Д/З на завтра — {dn}, {tomorrow.strftime('%d.%m')}*
+        text = f"""📋 *Д/З на завтра — {dn}, {tomorrow.strftime('%d.%m')}*
 {DIV}
 
-"
-                f"📭 На понеділок Д/З немає 🎉
-Гарного відпочинку!")
+📭 На понеділок Д/З немає 🎉
+Гарного відпочинку!
+"""
 
     await _broadcast(ctx.bot, text)
 
