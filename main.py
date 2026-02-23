@@ -478,14 +478,14 @@ async def job_morning(ctx: ContextTypes.DEFAULT_TYPE):
     lesson_idx = 0
     for num, start, end in BELLS:
         if num == 0:
-            sched_lines += f"   ☕ Перерва {start}–{end}
-"
+            sched_lines += f"   ☕ Перерва {start}–{end}\n"
         else:
             if lesson_idx < len(subjects):
                 s = subjects[lesson_idx]
-                sched_lines += f"╭─ *{num}.* {ei(s)} {s}
-╰─ {start}–{end}
-"
+                sched_lines += (
+    f"╭─ *{num}.* {ei(s)} {s}\n"
+    f"╰─ {start}–{end}\n"
+)
                 lesson_idx += 1
 
     text = f"☀️ *Доброго ранку!*
