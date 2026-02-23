@@ -1565,6 +1565,103 @@
             overflow-wrap: break-word;
             word-break: break-word;
         }
+
+        /* ═══════════════════════════════════════
+           ВАЖЛИВЕ ЗАВДАННЯ
+        ═══════════════════════════════════════ */
+        .hw-card.important {
+            border: 1.5px solid rgba(255, 69, 58, .55);
+            background: linear-gradient(135deg,
+                rgba(255, 69, 58, .13) 0%,
+                rgba(28, 28, 30, .85) 60%);
+        }
+        .hw-card.important::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 14px;
+            background: linear-gradient(135deg,
+                rgba(255, 69, 58, .08) 0%,
+                transparent 50%);
+            pointer-events: none;
+        }
+        .important-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            font-weight: 700;
+            color: #ff453a;
+            letter-spacing: .4px;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        /* Тогл "Важливе" у формі */
+        .important-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 2px 0;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .important-toggle-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 15px;
+            font-weight: 600;
+        }
+        .important-toggle-icon {
+            font-size: 20px;
+            line-height: 1;
+        }
+        /* iOS-style switch */
+        .ios-switch {
+            position: relative;
+            width: 51px;
+            height: 31px;
+            flex-shrink: 0;
+        }
+        .ios-switch input { opacity: 0; width: 0; height: 0; position: absolute }
+        .ios-switch-track {
+            position: absolute;
+            inset: 0;
+            border-radius: 999px;
+            background: rgba(118,118,128,.32);
+            transition: background .25s;
+        }
+        .ios-switch input:checked ~ .ios-switch-track {
+            background: #ff453a;
+        }
+        .ios-switch-thumb {
+            position: absolute;
+            top: 2px; left: 2px;
+            width: 27px; height: 27px;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 2px 6px rgba(0,0,0,.35);
+            transition: transform .25s cubic-bezier(.34,1.56,.64,1);
+        }
+        .ios-switch input:checked ~ .ios-switch-thumb {
+            transform: translateX(20px);
+        }
+        /* Бейдж у деталях */
+        .detail-important-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255,69,58,.15);
+            border: 1px solid rgba(255,69,58,.4);
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #ff453a;
+            letter-spacing: .3px;
+            margin-bottom: 14px;
+        }
+
     </style>
 </head>
 
@@ -1654,7 +1751,22 @@
                 <div class="file-preview-list" id="add-files-preview"></div>
             </div>
 
-            <div class="main-btn" id="btn-add-save" onclick="submitHW()">
+
+            <div class="modal-block">
+                <div class="important-toggle" onclick="document.getElementById('add-important').click()">
+                    <div class="important-toggle-label">
+                        <span class="important-toggle-icon">🔴</span>
+                        Важливе завдання
+                    </div>
+                    <label class="ios-switch" onclick="event.stopPropagation()">
+                        <input type="checkbox" id="add-important">
+                        <div class="ios-switch-track"></div>
+                        <div class="ios-switch-thumb"></div>
+                    </label>
+                </div>
+            </div>
+
+                        <div class="main-btn" id="btn-add-save" onclick="submitHW()">
                 <span class="btn-spinner"></span>
                 <span id="ico-save-add"></span>
                 Зберегти
@@ -1670,6 +1782,8 @@
         </div>
         <div class="modal-content">
             <div class="modal-subj" id="modal-subj"></div>
+
+            <div id="detail-important-badge" style="display:none;" class="detail-important-badge">🔴 Важливе завдання</div>
 
             <!-- meta row -->
             <div class="detail-meta">
@@ -1747,7 +1861,22 @@
                 <div class="file-preview-list" id="edit-files-preview"></div>
             </div>
 
-            <div class="main-btn" id="btn-edit-save" onclick="submitEdit()">
+
+            <div class="modal-block">
+                <div class="important-toggle" onclick="document.getElementById('edit-important').click()">
+                    <div class="important-toggle-label">
+                        <span class="important-toggle-icon">🔴</span>
+                        Важливе завдання
+                    </div>
+                    <label class="ios-switch" onclick="event.stopPropagation()">
+                        <input type="checkbox" id="edit-important">
+                        <div class="ios-switch-track"></div>
+                        <div class="ios-switch-thumb"></div>
+                    </label>
+                </div>
+            </div>
+
+                        <div class="main-btn" id="btn-edit-save" onclick="submitEdit()">
                 <span class="btn-spinner"></span>
                 <span id="ico-save-edit"></span>
                 Зберегти зміни
@@ -2036,21 +2165,11 @@
             const now = new Date(), di = now.getDay() - 1;
             if (di < 0 || di > 4) return null;
             const dn = DAYS_FULL[di], sub = SCHEDULE[dn] || [];
-            const cm = now.getHours() * 60 + now.getMinutes();
-            let li = 0, lastSubject = null;
+            let li = 0;
             for (const b of BELLS) {
-                if (b.isBreak) {
-                    // Якщо зараз перерва — повертаємо попередній предмет
-                    const [sh, sm] = b.s.split(':').map(Number);
-                    const [eh, em] = b.e.split(':').map(Number);
-                    if (cm >= sh * 60 + sm && cm <= eh * 60 + em) return lastSubject;
-                    continue;
-                }
+                if (b.isBreak) continue;
                 if (li < sub.length) {
                     if (isCurrentLesson(b, dn)) return sub[li];
-                    // Запам'ятовуємо предмет якщо цей урок вже завершився
-                    const [eh, em] = b.e.split(':').map(Number);
-                    if (cm > eh * 60 + em) lastSubject = sub[li];
                     li++;
                 }
             }
@@ -2060,11 +2179,16 @@
         function getNextDateForSubject(subj) {
             const now = new Date();
             const todayISO = localISO(now);
-            // Починаємо з i=1 — сьогодні завжди ігноруємо
-            for (let i = 1; i <= 8; i++) {
+            for (let i = 0; i <= 7; i++) {
                 const d = new Date(now); d.setDate(d.getDate() + i);
                 const di = d.getDay() - 1;
                 if (di >= 0 && di <= 4 && (SCHEDULE[DAYS_FULL[di]] || []).includes(subj)) {
+                    if (i === 0) {
+                        const last = BELLS.filter(b => !b.isBreak).slice(-1)[0];
+                        const [lh, lm] = last.e.split(':').map(Number);
+                        const after = (now.getHours() * 60 + now.getMinutes()) > (lh * 60 + lm);
+                        if (after) continue;
+                    }
                     return localISO(d);
                 }
             }
@@ -2581,6 +2705,9 @@
         function fillDetailModal(task) {
             currentTask = task;
             document.getElementById('modal-subj').innerText = task.subject;
+            // Бейдж важливого
+            const impBadge = document.getElementById('detail-important-badge');
+            if (impBadge) impBadge.style.display = task.is_important ? 'inline-flex' : 'none';
             document.getElementById('modal-desc').innerText = task.description;
             renderLinks(task.description || '', document.getElementById('modal-links'));
 
@@ -2627,6 +2754,7 @@
             document.getElementById('add-desc').value = '';
             addFilesList = []; renderFP('add', []);
             addDateTouched = false;
+            document.getElementById('add-important').checked = false;
 
             const cur = getCurrentSubject();
             if (cur) {
@@ -2669,7 +2797,7 @@
                 await fetch('/api/hw_add', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ date, subject: subj, description: desc, author, author_id, attachments: uploaded })
+                    body: JSON.stringify({ date, subject: subj, description: desc, author, author_id, attachments: uploaded, is_important: document.getElementById('add-important').checked ? 1 : 0 })
                 });
 
                 tg.showAlert("✅ Завдання додано!");
@@ -2775,6 +2903,7 @@
             editDate.onchange = () => { editDateTouched = true };
 
             document.getElementById('edit-desc').value = currentTask.description;
+            document.getElementById('edit-important').checked = !!currentTask.is_important;
 
             editAttList = (currentTask.attachments || []).map(a => ({ ...a, _isNew: false }));
             editNewFiles = []; renderEditAtt(); renderFP('edit', []);
@@ -2813,7 +2942,7 @@
                 await fetch('/api/hw_update', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: currentTask.id, subject, date, description: desc, attachments: finalAtts })
+                    body: JSON.stringify({ id: currentTask.id, subject, date, description: desc, attachments: finalAtts, is_important: document.getElementById('edit-important').checked ? 1 : 0 })
                 });
 
                 closeModalById('edit-hw-modal');
@@ -2934,13 +3063,14 @@
 
         function createHWCard(task, dateKey) {
             const card = document.createElement('div');
-            card.className = 'hw-card';
-            card.dataset.id = String(task.id);
             const isNew = newlyAddedIds.has(String(task.id));
-            if (isNew) card.classList.add('new-task');
+            card.className = 'hw-card' + (isNew ? ' new-task' : '') + (task.is_important ? ' important' : '');
+            card.dataset.id = String(task.id);
+            card.dataset.important = task.is_important ? '1' : '0';
             card.style.animation = `slideUpFade 0.45s cubic-bezier(0.2,0.8,0.2,1) forwards ${isNew ? 0 : 0.02}s`;
             const clip = (task.attachments?.length) ? " 📎" : "";
-            card.innerHTML = `<div class="subj-title">${escapeHTML(task.subject)}${clip}</div><div class="hw-short">${escapeHTML(task.description)}</div>`;
+            const impBadge = task.is_important ? '<div class="important-badge">🔴 Важливе</div>' : '';
+            card.innerHTML = `${impBadge}<div class="subj-title">${escapeHTML(task.subject)}${clip}</div><div class="hw-short">${escapeHTML(task.description)}</div>`;
             card.onclick = () => openModal('detail-modal', () => fillDetailModal({ ...task, date: dateKey }));
             return card;
         }
@@ -2948,7 +3078,9 @@
         function reconcileHWList(dateKey, opts = {}) {
             const { forceRebuild = false } = opts;
             const c = document.getElementById('hw-container');
-            const tasks = hwData[dateKey]?.tasks || [];
+            // Важливі вгорі
+            const rawTasks = hwData[dateKey]?.tasks || [];
+            const tasks = [...rawTasks.filter(t => t.is_important), ...rawTasks.filter(t => !t.is_important)];
             if (!tasks.length) {
                 if (!c.dataset.emptyShown || forceRebuild) {
                     c.dataset.emptyShown = "1";
@@ -3087,18 +3219,19 @@
 
             const list = document.getElementById('all-hw-list');
             list.innerHTML = '';
-            allHWData
-                .filter(t => isDate ? t.date === currentActiveFilter : t.subject === currentActiveFilter)
-                .forEach((task, i) => {
+            const filteredTasks = allHWData.filter(t => isDate ? t.date === currentActiveFilter : t.subject === currentActiveFilter);
+            const sortedTasks = [...filteredTasks.filter(t => t.is_important), ...filteredTasks.filter(t => !t.is_important)];
+            sortedTasks.forEach((task, i) => {
                     const card = document.createElement('div');
-                    card.className = `hw-card ${newlyAddedIds.has(String(task.id)) ? 'new-task' : ''}`;
+                    card.className = `hw-card ${newlyAddedIds.has(String(task.id)) ? 'new-task' : ''} ${task.is_important ? 'important' : ''}`;
                     card.style.animation = `slideUpFade .4s forwards ${i * 0.05}s`;
                     const clip = (task.attachments?.length) ? " 📎" : "";
                     const titleText = isDate
                         ? task.subject
                         : new Date(task.date + "T00:00:00").toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
 
-                    card.innerHTML = `<div class="subj-title">${escapeHTML(titleText)}${clip}</div><div class="hw-short">${escapeHTML(task.description)}</div>`;
+                    const impB = task.is_important ? '<div class="important-badge">🔴 Важливе</div>' : '';
+                    card.innerHTML = `${impB}<div class="subj-title">${escapeHTML(titleText)}${clip}</div><div class="hw-short">${escapeHTML(task.description)}</div>`;
                     card.onclick = () => openModal('detail-modal', () => fillDetailModal(task));
                     list.appendChild(card);
                 });
@@ -3109,7 +3242,8 @@
             const list = document.getElementById('all-hw-list');
             list.innerHTML = '';
 
-            const tasks = allHWData.filter(t => isDate ? t.date === currentActiveFilter : t.subject === currentActiveFilter);
+            const rawFiltered = allHWData.filter(t => isDate ? t.date === currentActiveFilter : t.subject === currentActiveFilter);
+            const tasks = [...rawFiltered.filter(t => t.is_important), ...rawFiltered.filter(t => !t.is_important)];
 
             if (!tasks.length) {
                 list.innerHTML = '<div class="empty-state">Немає завдань</div>';
@@ -3118,7 +3252,7 @@
 
             tasks.forEach((task, i) => {
                 const card = document.createElement('div');
-                card.className = `hw-card ${newlyAddedIds.has(String(task.id)) ? 'new-task' : ''}`;
+                card.className = `hw-card ${newlyAddedIds.has(String(task.id)) ? 'new-task' : ''} ${task.is_important ? 'important' : ''}`;
                 card.style.animation = `slideUpFade .4s forwards ${i * 0.05}s`;
 
                 const clip = (task.attachments?.length) ? " 📎" : "";
@@ -3126,7 +3260,8 @@
                     ? task.subject
                     : new Date(task.date + "T00:00:00").toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
 
-                card.innerHTML = `<div class="subj-title">${escapeHTML(titleText)}${clip}</div><div class="hw-short">${escapeHTML(task.description)}</div>`;
+                const impBL = task.is_important ? '<div class="important-badge">🔴 Важливе</div>' : '';
+                card.innerHTML = `${impBL}<div class="subj-title">${escapeHTML(titleText)}${clip}</div><div class="hw-short">${escapeHTML(task.description)}</div>`;
                 card.onclick = () => openModal('detail-modal', () => fillDetailModal(task));
                 list.appendChild(card);
             });
