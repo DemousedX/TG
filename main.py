@@ -24,7 +24,6 @@ from telegram import (
 )
 from telegram.constants import ChatType
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
-import requests
 
 # ==========================================
 # ⚙️ НАЛАШТУВАННЯ
@@ -33,7 +32,6 @@ TOKEN = os.getenv("BOT_TOKEN")
 if not TOKEN:
     log = logging.getLogger(__name__)
     log.warning("❌ BOT_TOKEN не задано.")
-requests.get(f"https://api.telegram.org/bot{TOKEN}/deleteWebhook")
 
 WEB_APP_URL  = os.getenv("WEB_APP_URL",  "https://tviy-bot.onrender.com")
 WEBHOOK_URL  = os.getenv("WEBHOOK_URL",  "")  # задати на Render = той самий домен
