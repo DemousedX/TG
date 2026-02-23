@@ -22,7 +22,6 @@ from telegram import (
     Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup,
     WebAppInfo, MenuButtonWebApp
 )
-from telegram.constants import ChatType
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # ==========================================
@@ -37,7 +36,6 @@ WEB_APP_URL = os.getenv("WEB_APP_URL", "https://tviy-bot.onrender.com")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 UPLOAD_DIR = "uploads"
-START_WEBAPP = ""  # заповнюється в lifespan
 MAX_UPLOAD_MB = 60
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 
@@ -109,6 +107,11 @@ def init_db():
     if not DATABASE_URL:
         return
     with dbc() as c:
+        # Додаємо колонку is_important якщо ще немає (міграція)
+        try:
+            c.execute("ALTER TABLE homework ADD COLUMN is_important INTEGER DEFAULT 0")
+        except Exception:
+            pass  # вже існує
         c.execute("""
             CREATE TABLE IF NOT EXISTS homework(
                 id SERIAL PRIMARY KEY,
@@ -118,7 +121,8 @@ def init_db():
                 author_id BIGINT,
                 author_name TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_done INTEGER DEFAULT 0
+                is_done INTEGER DEFAULT 0,
+                is_important INTEGER DEFAULT 0
             )
         """)
         c.execute("""
@@ -199,10 +203,10 @@ def _attachments_for_hw_ids(ids: List[int]) -> Dict[int, List[Dict[str, Any]]]:
 def hw_for_date_formatted(d: str):
     with dbc() as c:
         rows = c.execute("""
-            SELECT id, subject, description, due_date, author_name, author_id
+            SELECT id, subject, description, due_date, author_name, author_id, is_important
             FROM homework
             WHERE due_date=%s
-            ORDER BY subject
+            ORDER BY is_important DESC, subject
         """, (d,)).fetchall()
 
     ids = [int(r["id"]) for r in rows]
@@ -214,6 +218,7 @@ def hw_for_date_formatted(d: str):
         "description": r["description"],
         "author": r["author_name"] or "—",
         "author_id": r["author_id"],
+        "is_important": int(r["is_important"] or 0),
         "attachments": att_map.get(int(r["id"]), [])
     } for r in rows]
 
@@ -507,8 +512,6 @@ async def lifespan(app: FastAPI):
         jq.run_daily(job_cleanup, time=time(hour=0, minute=5, tzinfo=KYIV_TZ))
 
         await ptb_app.initialize()
-        global START_WEBAPP
-        START_WEBAPP = f"https://t.me/{ptb_app.bot.username}?start=webapp"
         await ptb_app.start()
         await ptb_app.updater.start_polling()
         log.info("🚀 Telegram Бот працює паралельно з FastAPI!")
@@ -552,10 +555,10 @@ async def get_hw_all_api():
         return []
     with dbc() as c:
         rows = c.execute("""
-            SELECT id, subject, description, author_name, author_id, due_date
+            SELECT id, subject, description, author_name, author_id, due_date, is_important
             FROM homework
             WHERE due_date >= %s
-            ORDER BY due_date, subject
+            ORDER BY due_date, is_important DESC, subject
         """, (today,)).fetchall()
 
     ids = [int(r["id"]) for r in rows]
@@ -568,6 +571,7 @@ async def get_hw_all_api():
         "author": r["author_name"] or "—",
         "author_id": r["author_id"],
         "date": r["due_date"],
+        "is_important": int(r["is_important"] or 0),
         "attachments": att_map.get(int(r["id"]), [])
     } for r in rows]
 
@@ -613,13 +617,14 @@ async def api_add_hw(request: Request):
     author = data.get("author", "Mini App")
     author_id = data.get("author_id")
     attachments = data.get("attachments") or []
+    is_important = int(data.get("is_important") or 0)
 
     if subject and desc and due:
         with dbc() as c:
             cur = c.execute("""
-                INSERT INTO homework(subject, description, due_date, author_name, author_id)
-                VALUES(%s,%s,%s,%s,%s) RETURNING id
-            """, (subject, desc, due, author, author_id))
+                INSERT INTO homework(subject, description, due_date, author_name, author_id, is_important)
+                VALUES(%s,%s,%s,%s,%s,%s) RETURNING id
+            """, (subject, desc, due, author, author_id, is_important))
             hw_id = cur.fetchone()["id"]
 
             for a in attachments:
@@ -665,6 +670,7 @@ async def api_update_hw(request: Request):
     due = data.get("date")
     desc = data.get("description")
     attachments = data.get("attachments")
+    is_important = int(data.get("is_important") or 0)
 
     if not hw_id:
         return {"status": "error", "message": "No ID provided"}
@@ -674,9 +680,9 @@ async def api_update_hw(request: Request):
     with dbc() as c:
         c.execute("""
             UPDATE homework
-            SET subject=%s, due_date=%s, description=%s
+            SET subject=%s, due_date=%s, description=%s, is_important=%s
             WHERE id=%s
-        """, (subject, due, desc, hw_id))
+        """, (subject, due, desc, is_important, hw_id))
 
         if attachments is not None:
             kept_names = {a.get("stored_name") for a in (attachments or []) if a.get("stored_name")}
