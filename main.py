@@ -33,8 +33,8 @@ if not TOKEN:
     log = logging.getLogger(__name__)
     log.warning("❌ BOT_TOKEN не задано.")
 
-WEB_APP_URL  = os.getenv("WEB_APP_URL",  "https://tviy-bot.onrender.com")
-WEBHOOK_URL  = os.getenv("WEBHOOK_URL",  "")  # задати на Render = той самий домен
+WEB_APP_URL  = os.getenv("WEB_APP_URL",  "https://tg-0ncg.onrender.com")
+WEBHOOK_URL  = os.getenv("WEBHOOK_URL",  "https://tg-0ncg.onrender.com")  # задати на Render = той самий домен
 WEBHOOK_PATH = "/webhook/telegram"
 DATABASE_URL = os.getenv("DATABASE_URL")
 
@@ -604,58 +604,62 @@ ptb_app = Application.builder().token(TOKEN).build() if TOKEN else None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+
     if ptb_app:
+        await ptb_app.initialize()
+
+        # Команди
         await ptb_app.bot.set_my_commands([
-            BotCommand("start",    "🚀 Запустити бота"),
-            BotCommand("menu",     "📚 Головне меню"),
+            BotCommand("start", "🚀 Запустити бота"),
+            BotCommand("menu", "📚 Головне меню"),
             BotCommand("schedule", "📆 Розклад уроків"),
         ])
+
         await ptb_app.bot.set_chat_menu_button(
-            menu_button=MenuButtonWebApp(text="📱 Щоденник", web_app=WebAppInfo(url=WEB_APP_URL))
+            menu_button=MenuButtonWebApp(
+                text="📱 Щоденник",
+                web_app=WebAppInfo(url=WEB_APP_URL)
+            )
         )
 
-        ptb_app.add_handler(CommandHandler("start",    cmd_start))
-        ptb_app.add_handler(CommandHandler("menu",     cmd_menu))
+        # Хендлери
+        ptb_app.add_handler(CommandHandler("start", cmd_start))
+        ptb_app.add_handler(CommandHandler("menu", cmd_menu))
         ptb_app.add_handler(CommandHandler("schedule", cmd_schedule))
-        ptb_app.add_handler(CallbackQueryHandler(cb_close_menu,     pattern="^close_menu$"))
-        ptb_app.add_handler(CallbackQueryHandler(cb_go_main,        pattern="^go_main$"))
-        ptb_app.add_handler(CallbackQueryHandler(cb_menu_schedule,  pattern="^menu_schedule$"))
-        ptb_app.add_handler(CallbackQueryHandler(cb_sched_day,      pattern="^sched_"))
-        ptb_app.add_handler(CallbackQueryHandler(cb_menu_sub,       pattern="^menu_sub$"))
-        ptb_app.add_handler(CallbackQueryHandler(cb_sub_private,    pattern="^sub_private$"))
+        ptb_app.add_handler(CallbackQueryHandler(cb_close_menu, pattern="^close_menu$"))
+        ptb_app.add_handler(CallbackQueryHandler(cb_go_main, pattern="^go_main$"))
+        ptb_app.add_handler(CallbackQueryHandler(cb_menu_schedule, pattern="^menu_schedule$"))
+        ptb_app.add_handler(CallbackQueryHandler(cb_sched_day, pattern="^sched_"))
+        ptb_app.add_handler(CallbackQueryHandler(cb_menu_sub, pattern="^menu_sub$"))
+        ptb_app.add_handler(CallbackQueryHandler(cb_sub_private, pattern="^sub_private$"))
         ptb_app.add_handler(CallbackQueryHandler(cb_sub_group_info, pattern="^sub_group_info$"))
-        ptb_app.add_handler(CallbackQueryHandler(cb_sub_cancel,     pattern="^sub_cancel$"))
-        ptb_app.add_handler(CallbackQueryHandler(cb_help,           pattern="^help$"))
+        ptb_app.add_handler(CallbackQueryHandler(cb_sub_cancel, pattern="^sub_cancel$"))
+        ptb_app.add_handler(CallbackQueryHandler(cb_help, pattern="^help$"))
 
+        # Jobs
         jq = ptb_app.job_queue
-        jq.run_daily(job_morning,         time=time(hour=9,  minute=0,  tzinfo=KYIV_TZ))
-        jq.run_daily(job_evening,         time=time(hour=18, minute=0,  tzinfo=KYIV_TZ))
-        jq.run_daily(job_sunday_evening,  time=time(hour=18, minute=0,  tzinfo=KYIV_TZ))
-        jq.run_daily(job_cleanup,         time=time(hour=0,  minute=5,  tzinfo=KYIV_TZ))
+        jq.run_daily(job_morning, time=time(hour=9, minute=0, tzinfo=KYIV_TZ))
+        jq.run_daily(job_evening, time=time(hour=18, minute=0, tzinfo=KYIV_TZ))
+        jq.run_daily(job_sunday_evening, time=time(hour=18, minute=0, tzinfo=KYIV_TZ))
+        jq.run_daily(job_cleanup, time=time(hour=0, minute=5, tzinfo=KYIV_TZ))
 
-        await ptb_app.initialize()
-        global START_WEBAPP
-        START_WEBAPP = f"https://t.me/{ptb_app.bot.username}?start=webapp"
         await ptb_app.start()
 
-        if WEBHOOK_URL:
-            await ptb_app.bot.delete_webhook(drop_pending_updates=True)
-            wh = WEBHOOK_URL.rstrip("/") + WEBHOOK_PATH
-            await ptb_app.bot.set_webhook(wh)
-            log.info("🔗 Webhook: %s", wh)
-        else:
-            await ptb_app.updater.start_polling(drop_pending_updates=True)
-            log.info("🔄 Polling (локально)")
+        # 🔥 ТІЛЬКИ WEBHOOK
+        if not WEBHOOK_URL:
+            raise RuntimeError("WEBHOOK_URL must be set on Render")
 
-        log.info("🚀 Бот v5.6 запущено!")
+        await ptb_app.bot.delete_webhook(drop_pending_updates=True)
+
+        webhook_url = WEBHOOK_URL.rstrip("/") + WEBHOOK_PATH
+        await ptb_app.bot.set_webhook(webhook_url)
+
+        log.info("Webhook set to %s", webhook_url)
 
     yield
 
     if ptb_app:
-        if WEBHOOK_URL:
-            await ptb_app.bot.delete_webhook()
-        else:
-            await ptb_app.updater.stop()
+        await ptb_app.bot.delete_webhook()
         await ptb_app.stop()
         await ptb_app.shutdown()
 
