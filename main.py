@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════╗
-║        ЩОДЕННИК КЛАСУ  •  v5.2           ║
+║        ЩОДЕННИК КЛАСУ  •  v5.6           ║
 ║     FastAPI + Telegram Bot (Unified)     ║
 ║        PostgreSQL Cloud Edition          ║
 ╚══════════════════════════════════════════╝
@@ -33,7 +33,9 @@ if not TOKEN:
     log = logging.getLogger(__name__)
     log.warning("❌ BOT_TOKEN не задано.")
 
-WEB_APP_URL = os.getenv("WEB_APP_URL", "https://tviy-bot.onrender.com") 
+WEB_APP_URL  = os.getenv("WEB_APP_URL",  "https://tviy-bot.onrender.com")
+WEBHOOK_URL  = os.getenv("WEBHOOK_URL",  "")  # задати на Render = той самий домен
+WEBHOOK_PATH = "/webhook/telegram"
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 UPLOAD_DIR = "uploads"
@@ -109,6 +111,10 @@ def init_db():
     if not DATABASE_URL:
         return
     with dbc() as c:
+        try:
+            c.execute("ALTER TABLE homework ADD COLUMN is_important INTEGER DEFAULT 0")
+        except Exception:
+            pass  # колонка вже існує
         c.execute("""
             CREATE TABLE IF NOT EXISTS homework(
                 id SERIAL PRIMARY KEY,
@@ -118,7 +124,8 @@ def init_db():
                 author_id BIGINT,
                 author_name TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_done INTEGER DEFAULT 0
+                is_done INTEGER DEFAULT 0,
+                is_important INTEGER DEFAULT 0
             )
         """)
         c.execute("""
@@ -199,10 +206,10 @@ def _attachments_for_hw_ids(ids: List[int]) -> Dict[int, List[Dict[str, Any]]]:
 def hw_for_date_formatted(d: str):
     with dbc() as c:
         rows = c.execute("""
-            SELECT id, subject, description, due_date, author_name, author_id
+            SELECT id, subject, description, due_date, author_name, author_id, is_important
             FROM homework
             WHERE due_date=%s
-            ORDER BY subject
+            ORDER BY is_important DESC, subject
         """, (d,)).fetchall()
 
     ids = [int(r["id"]) for r in rows]
@@ -214,6 +221,7 @@ def hw_for_date_formatted(d: str):
         "description": r["description"],
         "author": r["author_name"] or "—",
         "author_id": r["author_id"],
+        "is_important": int(r["is_important"] or 0),
         "attachments": att_map.get(int(r["id"]), [])
     } for r in rows]
 
@@ -447,24 +455,138 @@ async def cb_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         reply_markup=kb([_back()])
     )
 
-async def job_morning(ctx: ContextTypes.DEFAULT_TYPE):
-    today = today_kyiv()
-    rows = hw_for_date_formatted(today.isoformat())
-    dn = day_name(today)
-    if rows:
-        text = f"☀️ *Доброго ранку!*\n📅 *{DAYS_UA[today.weekday()]}, {today.strftime('%d.%m')}*\n{DIV}\n\n"
-        for r in rows:
-            clip = "📎" if r.get("attachments") else ""
-            text += f"╭─ {ei(r['subject'])} *{r['subject']}* {clip}\n│  📋 {r['description']}\n╰─ 👤 {r['author']}\n\n"
-    else:
-        text = f"☀️ *Доброго ранку!*\n\n📭 На сьогодні (*{dn}*) Д/З немає 🎉\nВідпочивай!"
-
+async def _broadcast(bot, text: str):
+    """Розсилає повідомлення всім підписникам."""
     for rec in sub_all():
-        chat_id = rec["chat_id"]
         try:
-            await ctx.bot.send_message(chat_id, text, parse_mode="Markdown")
+            await bot.send_message(rec["chat_id"], text, parse_mode="Markdown")
         except Exception as ex:
-            log.warning("Reminder failed %s: %s", chat_id, ex)
+            log.warning("Broadcast failed %s: %s", rec["chat_id"], ex)
+
+
+async def job_morning(ctx: ContextTypes.DEFAULT_TYPE):
+    """Пн–Пт 09:00 — розклад на сьогодні + список Д/З."""
+    today = today_kyiv()
+    if today.weekday() >= 5:          # сб=5, нд=6 — мовчимо
+        return
+
+    dn = DAYS_UA[today.weekday()]
+    subjects = SCHEDULE.get(dn, [])
+
+    # Блок розкладу
+    sched_lines = ""
+    lesson_idx = 0
+    for num, start, end in BELLS:
+        if num == 0:
+            sched_lines += f"   ☕ Перерва {start}–{end}
+"
+        else:
+            if lesson_idx < len(subjects):
+                s = subjects[lesson_idx]
+                sched_lines += f"╭─ *{num}.* {ei(s)} {s}
+╰─ {start}–{end}
+"
+                lesson_idx += 1
+
+    text = f"☀️ *Доброго ранку!*
+📅 *{dn}, {today.strftime('%d.%m')}*
+{DIV}
+
+"
+    text += f"📆 *Розклад на сьогодні:*
+{sched_lines}
+"
+
+    # Блок Д/З
+    rows = hw_for_date_formatted(today.isoformat())
+    if rows:
+        text += f"📚 *Д/З на сьогодні:*
+"
+        for r in rows:
+            imp  = "🔴 " if r.get("is_important") else ""
+            clip = " 📎" if r.get("attachments") else ""
+            text += f"╭─ {imp}{ei(r['subject'])} *{r['subject']}*{clip}
+│  📋 {r['description']}
+╰─ 👤 {r['author']}
+
+"
+    else:
+        text += f"📭 Д/З на сьогодні немає 🎉
+"
+
+    await _broadcast(ctx.bot, text)
+
+
+async def job_evening(ctx: ContextTypes.DEFAULT_TYPE):
+    """Пн–Пт 18:00 — тільки важливе Д/З на завтра."""
+    today = today_kyiv()
+    if today.weekday() >= 5:          # сб, нд — мовчимо
+        return
+
+    tomorrow = today + timedelta(days=1)
+    # Пропускаємо вихідні (якщо завтра сб або нд)
+    if tomorrow.weekday() >= 5:
+        return
+
+    rows = hw_for_date_formatted(tomorrow.isoformat())
+    important = [r for r in rows if r.get("is_important")]
+    if not important:
+        return  # немає важливого — мовчимо
+
+    dn = DAYS_UA[tomorrow.weekday()]
+    text = f"🔴 *Важливе Д/З на завтра — {dn}, {tomorrow.strftime('%d.%m')}*
+{DIV}
+
+"
+    for r in important:
+        clip = " 📎" if r.get("attachments") else ""
+        text += f"╭─ {ei(r['subject'])} *{r['subject']}*{clip}
+│  📋 {r['description']}
+╰─ 👤 {r['author']}
+
+"
+
+    await _broadcast(ctx.bot, text)
+
+
+async def job_sunday_evening(ctx: ContextTypes.DEFAULT_TYPE):
+    """Нд 18:00 — всі Д/З на понеділок + позначка важливих."""
+    today = today_kyiv()
+    if today.weekday() != 6:
+        return
+
+    tomorrow = today + timedelta(days=1)   # понеділок
+    rows = hw_for_date_formatted(tomorrow.isoformat())
+    dn = DAYS_UA[tomorrow.weekday()]
+
+    if rows:
+        has_imp = any(r.get("is_important") for r in rows)
+        text = f"📋 *Д/З на завтра — {dn}, {tomorrow.strftime('%d.%m')}*
+{DIV}
+
+"
+        if has_imp:
+            text += "⚠️ *Є важливі завдання!*
+
+"
+        for r in rows:
+            imp  = "🔴 " if r.get("is_important") else ""
+            clip = " 📎" if r.get("attachments") else ""
+            text += f"╭─ {imp}{ei(r['subject'])} *{r['subject']}*{clip}
+│  📋 {r['description']}
+╰─ 👤 {r['author']}
+
+"
+    else:
+        text = (f"📋 *Д/З на завтра — {dn}, {tomorrow.strftime('%d.%m')}*
+{DIV}
+
+"
+                f"📭 На понеділок Д/З немає 🎉
+Гарного відпочинку!")
+
+    await _broadcast(ctx.bot, text)
+
 
 async def job_cleanup(ctx: ContextTypes.DEFAULT_TYPE):
     n = hw_cleanup()
@@ -503,24 +625,46 @@ async def lifespan(app: FastAPI):
         ptb_app.add_handler(CallbackQueryHandler(cb_help,           pattern="^help$"))
 
         jq = ptb_app.job_queue
-        jq.run_daily(job_morning, time=time(hour=9, minute=0, tzinfo=KYIV_TZ))
-        jq.run_daily(job_cleanup, time=time(hour=0, minute=5, tzinfo=KYIV_TZ))
+        jq.run_daily(job_morning,         time=time(hour=9,  minute=0,  tzinfo=KYIV_TZ))
+        jq.run_daily(job_evening,         time=time(hour=18, minute=0,  tzinfo=KYIV_TZ))
+        jq.run_daily(job_sunday_evening,  time=time(hour=18, minute=0,  tzinfo=KYIV_TZ))
+        jq.run_daily(job_cleanup,         time=time(hour=0,  minute=5,  tzinfo=KYIV_TZ))
 
         await ptb_app.initialize()
         global START_WEBAPP
         START_WEBAPP = f"https://t.me/{ptb_app.bot.username}?start=webapp"
         await ptb_app.start()
-        await ptb_app.updater.start_polling()
-        log.info("🚀 Telegram Бот працює паралельно з FastAPI!")
+
+        if WEBHOOK_URL:
+            await ptb_app.bot.delete_webhook(drop_pending_updates=True)
+            wh = WEBHOOK_URL.rstrip("/") + WEBHOOK_PATH
+            await ptb_app.bot.set_webhook(wh)
+            log.info("🔗 Webhook: %s", wh)
+        else:
+            await ptb_app.updater.start_polling(drop_pending_updates=True)
+            log.info("🔄 Polling (локально)")
+
+        log.info("🚀 Бот v5.6 запущено!")
 
     yield
 
     if ptb_app:
-        await ptb_app.updater.stop()
+        if WEBHOOK_URL:
+            await ptb_app.bot.delete_webhook()
+        else:
+            await ptb_app.updater.stop()
         await ptb_app.stop()
         await ptb_app.shutdown()
 
 fastapi_app = FastAPI(lifespan=lifespan)
+
+@fastapi_app.post(WEBHOOK_PATH)
+async def telegram_webhook(request: Request):
+    if not ptb_app:
+        return JSONResponse({"status": "no bot"}, status_code=503)
+    update = Update.de_json(await request.json(), ptb_app.bot)
+    await ptb_app.process_update(update)
+    return JSONResponse({"status": "ok"})
 
 @fastapi_app.get("/files/{stored_name}")
 async def get_file(stored_name: str):
@@ -552,10 +696,10 @@ async def get_hw_all_api():
         return []
     with dbc() as c:
         rows = c.execute("""
-            SELECT id, subject, description, author_name, author_id, due_date
+            SELECT id, subject, description, author_name, author_id, due_date, is_important
             FROM homework
             WHERE due_date >= %s
-            ORDER BY due_date, subject
+            ORDER BY due_date, is_important DESC, subject
         """, (today,)).fetchall()
 
     ids = [int(r["id"]) for r in rows]
@@ -568,6 +712,7 @@ async def get_hw_all_api():
         "author": r["author_name"] or "—",
         "author_id": r["author_id"],
         "date": r["due_date"],
+        "is_important": int(r["is_important"] or 0),
         "attachments": att_map.get(int(r["id"]), [])
     } for r in rows]
 
@@ -613,13 +758,14 @@ async def api_add_hw(request: Request):
     author = data.get("author", "Mini App")
     author_id = data.get("author_id")
     attachments = data.get("attachments") or []
+    is_important = int(data.get("is_important") or 0)
 
     if subject and desc and due:
         with dbc() as c:
             cur = c.execute("""
-                INSERT INTO homework(subject, description, due_date, author_name, author_id)
-                VALUES(%s,%s,%s,%s,%s) RETURNING id
-            """, (subject, desc, due, author, author_id))
+                INSERT INTO homework(subject, description, due_date, author_name, author_id, is_important)
+                VALUES(%s,%s,%s,%s,%s,%s) RETURNING id
+            """, (subject, desc, due, author, author_id, is_important))
             hw_id = cur.fetchone()["id"]
 
             for a in attachments:
@@ -665,6 +811,7 @@ async def api_update_hw(request: Request):
     due = data.get("date")
     desc = data.get("description")
     attachments = data.get("attachments")
+    is_important = int(data.get("is_important") or 0)
 
     if not hw_id:
         return {"status": "error", "message": "No ID provided"}
@@ -674,9 +821,9 @@ async def api_update_hw(request: Request):
     with dbc() as c:
         c.execute("""
             UPDATE homework
-            SET subject=%s, due_date=%s, description=%s
+            SET subject=%s, due_date=%s, description=%s, is_important=%s
             WHERE id=%s
-        """, (subject, due, desc, hw_id))
+        """, (subject, due, desc, is_important, hw_id))
 
         if attachments is not None:
             kept_names = {a.get("stored_name") for a in (attachments or []) if a.get("stored_name")}
