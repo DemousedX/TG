@@ -2036,11 +2036,21 @@
             const now = new Date(), di = now.getDay() - 1;
             if (di < 0 || di > 4) return null;
             const dn = DAYS_FULL[di], sub = SCHEDULE[dn] || [];
-            let li = 0;
+            const cm = now.getHours() * 60 + now.getMinutes();
+            let li = 0, lastSubject = null;
             for (const b of BELLS) {
-                if (b.isBreak) continue;
+                if (b.isBreak) {
+                    // Якщо зараз перерва — повертаємо попередній предмет
+                    const [sh, sm] = b.s.split(':').map(Number);
+                    const [eh, em] = b.e.split(':').map(Number);
+                    if (cm >= sh * 60 + sm && cm <= eh * 60 + em) return lastSubject;
+                    continue;
+                }
                 if (li < sub.length) {
                     if (isCurrentLesson(b, dn)) return sub[li];
+                    // Запам'ятовуємо предмет якщо цей урок вже завершився
+                    const [eh, em] = b.e.split(':').map(Number);
+                    if (cm > eh * 60 + em) lastSubject = sub[li];
                     li++;
                 }
             }
@@ -2050,16 +2060,11 @@
         function getNextDateForSubject(subj) {
             const now = new Date();
             const todayISO = localISO(now);
-            for (let i = 0; i <= 7; i++) {
+            // Починаємо з i=1 — сьогодні завжди ігноруємо
+            for (let i = 1; i <= 8; i++) {
                 const d = new Date(now); d.setDate(d.getDate() + i);
                 const di = d.getDay() - 1;
                 if (di >= 0 && di <= 4 && (SCHEDULE[DAYS_FULL[di]] || []).includes(subj)) {
-                    if (i === 0) {
-                        const last = BELLS.filter(b => !b.isBreak).slice(-1)[0];
-                        const [lh, lm] = last.e.split(':').map(Number);
-                        const after = (now.getHours() * 60 + now.getMinutes()) > (lh * 60 + lm);
-                        if (after) continue;
-                    }
                     return localISO(d);
                 }
             }
