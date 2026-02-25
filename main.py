@@ -638,7 +638,7 @@ async def lifespan(app: FastAPI):
 
         # Jobs
         jq = ptb_app.job_queue
-        jq.run_daily(job_morning, time=time(hour=8, minute=0, tzinfo=KYIV_TZ))
+        jq.run_daily(job_morning, time=time(hour=9, minute=15, tzinfo=KYIV_TZ))
         jq.run_daily(job_evening, time=time(hour=18, minute=0, tzinfo=KYIV_TZ))
         jq.run_daily(job_sunday_evening, time=time(hour=18, minute=0, tzinfo=KYIV_TZ))
         jq.run_daily(job_cleanup, time=time(hour=0, minute=5, tzinfo=KYIV_TZ))
