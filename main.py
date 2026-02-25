@@ -859,6 +859,16 @@ async def api_update_hw(request: Request):
 
     return {"status": "ok"}
 
+# Спеціальний маршрут для Cron-job (мінімальне навантаження)
+@fastapi_app.get("/ping")
+async def ping():
+    return {"status": "alive", "timestamp": datetime.now(KYIV_TZ).isoformat()}
+
+# Обробка Favicon (щоб прибрати 404 помилки з логів)
+@fastapi_app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    from fastapi.responses import Response
+    return Response(status_code=204)
 # ==========================================
 # 🚀 RUN
 # ==========================================
