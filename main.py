@@ -724,6 +724,12 @@ async def get_file(stored_name: str):
         return JSONResponse({"status": "error", "message": "File not found"}, status_code=404)
     return FileResponse(path, filename=stored_name)
 
+@fastapi_app.head("/")
+async def head_root():
+    """Health check для Render — відповідає 200 на HEAD запити."""
+    from fastapi.responses import Response
+    return Response(status_code=200)
+
 @fastapi_app.get("/", response_class=HTMLResponse)
 async def read_root():
     with open("templates/index.html", "r", encoding="utf-8") as f:
