@@ -306,8 +306,9 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     title = chat.title if chat.type != "private" else None
 
-    if not sub_get(chat.id):
-        sub_add(chat.id, u.username or u.first_name, "private" if chat.type == "private" else "group", title)
+    # Автопідписка тільки для груп (не для приватних чатів, щоб скасування працювало)
+    if chat.type != "private" and not sub_get(chat.id):
+        sub_add(chat.id, u.username or u.first_name, "group", title)
 
     chat_type = chat.type
     payload = (ctx.args[0].strip().lower() if ctx.args else "")
@@ -328,7 +329,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"👋 Вітаємо, *{u.first_name}*!\n\n📚 *Щоденник Класу* — офіційний бот класу.\n{DIV}\n"
         f"Тут зберігається домашнє завдання,\nрозклад уроків і нагадування.\n\nОбери розділ:"
     ) if chat.type == "private" else (
-        f"📚 *Щоденник Класу* підключено!\n{DIV}\nНагадування надходитимуть щодня о *09:00*."
+        f"📚 *Щоденник Класу* підключено!\n{DIV}\nНагадування надходитимуть щодня о *08:00*."
     )
 
     await update.message.reply_text(
@@ -349,11 +350,13 @@ async def cmd_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown",
         reply_markup=kb_main(chat_type),
     )
-    await delete_msg(update.message)
+    if chat_type != ChatType.PRIVATE:
+        await delete_msg(update.message)
 
 async def cmd_schedule(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(HEADER_SCHED, parse_mode="Markdown", reply_markup=kb_schedule_days())
-    await delete_msg(update.message)
+    if update.effective_chat.type != ChatType.PRIVATE:
+        await delete_msg(update.message)
 
 async def cb_go_main(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -401,7 +404,7 @@ async def cb_menu_sub(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     rec = sub_get(update.effective_chat.id)
     status = f"✅ *Активна* — {'в групу 👥' if rec and rec['mode']=='group' else 'приватно 👤'}" if rec else "❌ *Не активна*"
     await q.edit_message_text(
-        f"🔔 *Підписка*\n{DIV}\n\nСтатус: {status}\n\nЩодня о *09:00* надходить список Д/З на поточний день.",
+        f"🔔 *Підписка*\n{DIV}\n\nСтатус: {status}\n\nЩодня о *08:00* надходить список Д/З на поточний день.",
         parse_mode="Markdown",
         reply_markup=kb_sub(bool(rec))
     )
@@ -413,7 +416,7 @@ async def cb_sub_private(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return await q.answer("⚠️ Тільки в приватному чаті!", show_alert=True)
     sub_add(update.effective_chat.id, update.effective_user.first_name, "private")
     await q.edit_message_text(
-        f"✅ *Підписку оформлено!*\n{DIV}\n\n👤 Нагадування щодня о *09:00*.",
+        f"✅ *Підписку оформлено!*\n{DIV}\n\n👤 Нагадування щодня о *08:00*.",
         parse_mode="Markdown",
         reply_markup=kb([_back()])
     )
@@ -422,7 +425,7 @@ async def cb_sub_group_info(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     await q.edit_message_text(
-        f"👥 *Підписка групи*\n{DIV}\n\n1️⃣  Додай бота до групи\n2️⃣  Напиши в групі /start\n3️⃣  Готово\n\n💡 Група отримуватиме Д/З о *09:00*.",
+        f"👥 *Підписка групи*\n{DIV}\n\n1️⃣  Додай бота до групи\n2️⃣  Напиши в групі /start\n3️⃣  Готово\n\n💡 Група отримуватиме Д/З о *08:00*.",
         parse_mode="Markdown",
         reply_markup=kb([_back("menu_sub")])
     )
@@ -445,7 +448,7 @@ async def cb_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "📱 *Щоденник* — відкриває міні-додаток, де зберігаються всі завдання.\n\n"
         "📎 *Вкладення* — можна додати pdf/фото/відео до завдання.\n\n"
         "📆 *Розклад* — уроки і час дзвінків по днях тижня.\n"
-        "🔔 *Підписка* — щоденне нагадування про Д/З о 09:00.\n"
+        "🔔 *Підписка* — щоденне нагадування про Д/З о 08:00.\n"
         f"{DIV}\n"
         "🤖 *Команди:*\n"
         "/menu — головне меню\n"
@@ -638,7 +641,7 @@ async def lifespan(app: FastAPI):
 
         # Jobs
         jq = ptb_app.job_queue
-        jq.run_daily(job_morning, time=time(hour=9, minute=15, tzinfo=KYIV_TZ))
+        jq.run_daily(job_morning, time=time(hour=8, minute=0, tzinfo=KYIV_TZ))
         jq.run_daily(job_evening, time=time(hour=18, minute=0, tzinfo=KYIV_TZ))
         jq.run_daily(job_sunday_evening, time=time(hour=18, minute=0, tzinfo=KYIV_TZ))
         jq.run_daily(job_cleanup, time=time(hour=0, minute=5, tzinfo=KYIV_TZ))
