@@ -45,7 +45,7 @@ WEBHOOK_SECRET_ACTIVE = False
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 UPLOAD_DIR = "uploads"
-START_WEBAPP = ""  # заповнюється в lifespan
+START_WEBAPP = WEB_APP_URL  # fallback; буде замінено на deep-link у lifespan
 MAX_UPLOAD_MB = 60
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 
@@ -298,7 +298,7 @@ def kb_main(chat_type: str):
     else:
         open_btn = InlineKeyboardButton(
             "🤖 Відкрити в боті",
-            url=START_WEBAPP,   # <- відкриває приватний чат з ботом
+            url=(START_WEBAPP or WEB_APP_URL),   # <- deep-link у приват (або fallback на сайт)
         )
 
     return kb(
@@ -672,6 +672,18 @@ async def lifespan(app: FastAPI):
             BotCommand("menu", "📚 Головне меню"),
             BotCommand("schedule", "📆 Розклад уроків"),
         ])
+
+        
+        # Deep-link для кнопки з групи -> відкриває приватний чат з ботом і передає payload "webapp"
+        # (щоб у приватці одразу показати меню / WebApp кнопки).
+        global START_WEBAPP
+        try:
+            me = await ptb_app.bot.get_me()
+            if getattr(me, "username", None):
+                START_WEBAPP = f"https://t.me/{me.username}?start=webapp"
+        except Exception:
+            # fallback залишаємо як WEB_APP_URL
+            pass
 
         await ptb_app.bot.set_chat_menu_button(
             menu_button=MenuButtonWebApp(
