@@ -1269,7 +1269,7 @@
             background: rgba(0, 0, 0, .62);
             backdrop-filter: blur(14px);
             -webkit-backdrop-filter: blur(14px);
-            z-index: 4000;
+            z-index: 5000;
             opacity: 0;
             pointer-events: none;
             transition: opacity .18s
@@ -1412,234 +1412,10 @@
             font-size: 20px;
             flex-shrink: 0;
         }
-
-
-        /* ═══════════════════════════════════════
-           INTRO SCREEN — "Вітаю"
-        ═══════════════════════════════════════ */
-        @keyframes introBlurIn {
-            0% {
-                opacity: 0;
-                filter: blur(18px);
-                transform: scale(1.08);
-            }
-
-            100% {
-                opacity: 1;
-                filter: blur(0px);
-                transform: scale(1.0);
-            }
-        }
-
-        @keyframes introSubIn {
-            0% {
-                opacity: 0;
-                transform: translateY(14px)
-            }
-
-            100% {
-                opacity: 1;
-                transform: translateY(0)
-            }
-        }
-
-        @keyframes introFadeOut {
-            0% {
-                opacity: 1;
-                transform: scale(1);
-            }
-
-            100% {
-                opacity: 0;
-                transform: scale(.96);
-            }
-        }
-
-        #intro-overlay {
-            position: fixed;
-            inset: 0;
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            background: rgba(0, 0, 0, .55);
-            backdrop-filter: blur(28px);
-            -webkit-backdrop-filter: blur(28px);
-            pointer-events: none;
-        }
-
-        #intro-overlay.out {
-            animation: introFadeOut .7s cubic-bezier(.4, 0, .2, 1) forwards;
-        }
-
-        #intro-overlay.gone {
-            display: none
-        }
-
-        .intro-hello {
-            font-size: clamp(52px, 14vw, 76px);
-            font-weight: 800;
-            letter-spacing: -2px;
-            background: linear-gradient(135deg, #fff 30%, var(--accent) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            animation: introBlurIn 1s cubic-bezier(.4, 0, .2, 1) both;
-        }
-
-        .intro-sub {
-            font-size: 16px;
-            font-weight: 600;
-            color: rgba(235, 235, 245, .6);
-            letter-spacing: .5px;
-            animation: introSubIn .6s .4s cubic-bezier(.4, 0, .2, 1) both;
-        }
-
-        /* ═══════════════════════════════════════
-           MODAL CONTENT — stagger анімація
-        ═══════════════════════════════════════ */
-        @keyframes modalItemIn {
-            0% {
-                opacity: 0;
-                transform: translateY(22px) scale(.97)
-            }
-
-            100% {
-                opacity: 1;
-                transform: translateY(0) scale(1)
-            }
-        }
-
-        .modal-content.animating>* {
-            opacity: 0;
-            animation: modalItemIn .42s cubic-bezier(.25, .8, .2, 1) both;
-        }
-
-        .modal-content.animating>*:nth-child(1) {
-            animation-delay: .04s
-        }
-
-        .modal-content.animating>*:nth-child(2) {
-            animation-delay: .11s
-        }
-
-        .modal-content.animating>*:nth-child(3) {
-            animation-delay: .18s
-        }
-
-        .modal-content.animating>*:nth-child(4) {
-            animation-delay: .25s
-        }
-
-        .modal-content.animating>*:nth-child(5) {
-            animation-delay: .32s
-        }
-
-        .modal-content.animating>*:nth-child(6) {
-            animation-delay: .39s
-        }
-
-        .modal-content.animating>*:nth-child(7) {
-            animation-delay: .46s
-        }
-
-        .modal-content.animating>*:nth-child(8) {
-            animation-delay: .53s
-        }
-
-        /* ═══════════════════════════════════════
-           TEXT OVERFLOW FIX
-        ═══════════════════════════════════════ */
-        .modal-desc {
-            overflow-wrap: break-word;
-            word-break: break-word;
-        }
-
-        .modal-block {
-            overflow: hidden;
-        }
-
-        .hw-short {
-            overflow-wrap: break-word;
-            word-break: break-word;
-        }
-
-        /* ═══════════════════════════════════════
-           ВАЖЛИВЕ ЗАВДАННЯ
-        ═══════════════════════════════════════ */
-        .hw-card.important {
-            border: 1.5px solid rgba(255, 69, 58, .5);
-            background: linear-gradient(135deg,
-                rgba(255, 69, 58, .12) 0%,
-                var(--card) 55%);
-        }
-        .hw-card.important::after { color: #ff453a }
-        .imp-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            font-size: 11px;
-            font-weight: 700;
-            color: #ff453a;
-            letter-spacing: .5px;
-            text-transform: uppercase;
-            margin-bottom: 4px;
-        }
-        /* Тогл у формах */
-        .imp-toggle-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            cursor: pointer;
-            -webkit-tap-highlight-color: transparent;
-            user-select: none;
-        }
-        .imp-toggle-label {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 15px;
-            font-weight: 600;
-        }
-        .ios-switch {
-            position: relative; width: 51px; height: 31px; flex-shrink: 0;
-        }
-        .ios-switch input { opacity: 0; width: 0; height: 0; position: absolute }
-        .ios-switch-track {
-            position: absolute; inset: 0; border-radius: 999px;
-            background: rgba(118,118,128,.32);
-            transition: background .25s;
-        }
-        .ios-switch input:checked ~ .ios-switch-track { background: #ff453a }
-        .ios-switch-thumb {
-            position: absolute; top: 2px; left: 2px;
-            width: 27px; height: 27px; border-radius: 50%;
-            background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35);
-            transition: transform .25s cubic-bezier(.34,1.56,.64,1);
-        }
-        .ios-switch input:checked ~ .ios-switch-thumb { transform: translateX(20px) }
-        /* Бейдж у деталях */
-        .detail-imp-badge {
-            display: inline-flex; align-items: center; gap: 6px;
-            background: rgba(255,69,58,.13);
-            border: 1px solid rgba(255,69,58,.38);
-            border-radius: 8px; padding: 6px 12px;
-            font-size: 13px; font-weight: 700; color: #ff453a;
-            letter-spacing: .3px; margin-bottom: 12px;
-        }
-
     </style>
 </head>
 
 <body>
-    <!-- INTRO -->
-    <div id="intro-overlay">
-        <div class="intro-hello">Вітаю</div>
-        <div class="intro-sub">Щоденник Класу 📚</div>
-    </div>
-
     <!-- GLOBAL LOADING -->
     <div class="loading-overlay" id="loading-overlay" aria-hidden="true">
         <div class="loading-card">
@@ -1719,21 +1495,6 @@
                 <div class="file-preview-list" id="add-files-preview"></div>
             </div>
 
-
-            <div class="modal-block">
-                <div class="imp-toggle-row" onclick="document.getElementById('add-important').click()">
-                    <div class="imp-toggle-label">
-                        <span style="font-size:20px">🔴</span>
-                        Важливе завдання
-                    </div>
-                    <label class="ios-switch" onclick="event.stopPropagation()">
-                        <input type="checkbox" id="add-important">
-                        <div class="ios-switch-track"></div>
-                        <div class="ios-switch-thumb"></div>
-                    </label>
-                </div>
-            </div>
-
             <div class="main-btn" id="btn-add-save" onclick="submitHW()">
                 <span class="btn-spinner"></span>
                 <span id="ico-save-add"></span>
@@ -1750,7 +1511,6 @@
         </div>
         <div class="modal-content">
             <div class="modal-subj" id="modal-subj"></div>
-            <div id="detail-imp-badge" class="detail-imp-badge" style="display:none">🔴 Важливе завдання</div>
 
             <!-- meta row -->
             <div class="detail-meta">
@@ -1826,21 +1586,6 @@
                     <span id="ico-plus-file"></span> Додати файли
                 </div>
                 <div class="file-preview-list" id="edit-files-preview"></div>
-            </div>
-
-
-            <div class="modal-block">
-                <div class="imp-toggle-row" onclick="document.getElementById('edit-important').click()">
-                    <div class="imp-toggle-label">
-                        <span style="font-size:20px">🔴</span>
-                        Важливе завдання
-                    </div>
-                    <label class="ios-switch" onclick="event.stopPropagation()">
-                        <input type="checkbox" id="edit-important">
-                        <div class="ios-switch-track"></div>
-                        <div class="ios-switch-thumb"></div>
-                    </label>
-                </div>
             </div>
 
             <div class="main-btn" id="btn-edit-save" onclick="submitEdit()">
@@ -2066,9 +1811,9 @@
         const SCHEDULE = {
             "Понеділок": ["Алгебра", "Фізика", "Інформатика", "Фізкультура", "Англ. Мова", "Біологія", "Технології"],
             "Вівторок": ["Хімія", "Геометрія", "Укр. Мова", "Укр. Літ", "Фізкультура", "Фізика"],
-            "Середа": ["Укр. Мова", "Мистецтво", "Укр. Літ", "Фізика", "Географія", "Мистецтво (0.5)"],
-            "Четвер": ["Історія", "Алгебра", "Хімія", "Історія України", "Біологія", "Інформ./Технол.", "Англ. Мова"],
-            "П'ятниця": ["Історія України", "Зар. Літ", "Астрономія", "Укр. Мова (дод)", "Фізкультура"]
+            "Середа": ["Укр. Мова", "Мистецтво", "Укр. Літ", "Фізика", "Географія"],
+            "Четвер": ["Історія", "Алгебра", "Хімія", "Історія України", "Біологія", "Технології", "Англ. Мова"],
+            "П'ятниця": ["Історія України", "Зар. Літ", "Астрономія", "Укр. Мова", "Фізкультура"]
         };
 
         const BELLS = [
@@ -2132,21 +1877,11 @@
             const now = new Date(), di = now.getDay() - 1;
             if (di < 0 || di > 4) return null;
             const dn = DAYS_FULL[di], sub = SCHEDULE[dn] || [];
-            const cm = now.getHours() * 60 + now.getMinutes();
-            let li = 0, lastSubject = null;
+            let li = 0;
             for (const b of BELLS) {
-                if (b.isBreak) {
-                    // Якщо зараз перерва — повертаємо попередній предмет
-                    const [sh, sm] = b.s.split(':').map(Number);
-                    const [eh, em] = b.e.split(':').map(Number);
-                    if (cm >= sh * 60 + sm && cm <= eh * 60 + em) return lastSubject;
-                    continue;
-                }
+                if (b.isBreak) continue;
                 if (li < sub.length) {
                     if (isCurrentLesson(b, dn)) return sub[li];
-                    // Запам'ятовуємо предмет якщо цей урок вже завершився
-                    const [eh, em] = b.e.split(':').map(Number);
-                    if (cm > eh * 60 + em) lastSubject = sub[li];
                     li++;
                 }
             }
@@ -2156,11 +1891,16 @@
         function getNextDateForSubject(subj) {
             const now = new Date();
             const todayISO = localISO(now);
-            // Починаємо з i=1 — сьогодні завжди ігноруємо
-            for (let i = 1; i <= 8; i++) {
+            for (let i = 0; i <= 7; i++) {
                 const d = new Date(now); d.setDate(d.getDate() + i);
                 const di = d.getDay() - 1;
                 if (di >= 0 && di <= 4 && (SCHEDULE[DAYS_FULL[di]] || []).includes(subj)) {
+                    if (i === 0) {
+                        const last = BELLS.filter(b => !b.isBreak).slice(-1)[0];
+                        const [lh, lm] = last.e.split(':').map(Number);
+                        const after = (now.getHours() * 60 + now.getMinutes()) > (lh * 60 + lm);
+                        if (after) continue;
+                    }
                     return localISO(d);
                 }
             }
@@ -2228,17 +1968,7 @@
         function openModal(id, cb = null) {
             playVibration('heavy');
             if (cb) cb();
-            const overlay = document.getElementById(id);
-            overlay.classList.add('open');
-            // stagger анімація вмісту модалки
-            const mc = overlay.querySelector('.modal-content');
-            if (mc) {
-                mc.classList.remove('animating');
-                void mc.offsetWidth; // force reflow — перезапуск анімації
-                mc.classList.add('animating');
-                mc._animTimer && clearTimeout(mc._animTimer);
-                mc._animTimer = setTimeout(() => mc.classList.remove('animating'), 900);
-            }
+            document.getElementById(id).classList.add('open');
             modalStack.push(id);
             tg.BackButton.show()
         }
@@ -2677,8 +2407,6 @@
         function fillDetailModal(task) {
             currentTask = task;
             document.getElementById('modal-subj').innerText = task.subject;
-            const impBadgeEl = document.getElementById('detail-imp-badge');
-            if (impBadgeEl) impBadgeEl.style.display = task.is_important ? 'inline-flex' : 'none';
             document.getElementById('modal-desc').innerText = task.description;
             renderLinks(task.description || '', document.getElementById('modal-links'));
 
@@ -2725,7 +2453,6 @@
             document.getElementById('add-desc').value = '';
             addFilesList = []; renderFP('add', []);
             addDateTouched = false;
-            document.getElementById('add-important').checked = false;
 
             const cur = getCurrentSubject();
             if (cur) {
@@ -2768,7 +2495,7 @@
                 await fetch('/api/hw_add', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ date, subject: subj, description: desc, author, author_id, attachments: uploaded, is_important: document.getElementById('add-important').checked ? 1 : 0 })
+                    body: JSON.stringify({ date, subject: subj, description: desc, author, author_id, attachments: uploaded })
                 });
 
                 tg.showAlert("✅ Завдання додано!");
@@ -2874,7 +2601,6 @@
             editDate.onchange = () => { editDateTouched = true };
 
             document.getElementById('edit-desc').value = currentTask.description;
-            document.getElementById('edit-important').checked = !!currentTask.is_important;
 
             editAttList = (currentTask.attachments || []).map(a => ({ ...a, _isNew: false }));
             editNewFiles = []; renderEditAtt(); renderFP('edit', []);
@@ -2913,7 +2639,7 @@
                 await fetch('/api/hw_update', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: currentTask.id, subject, date, description: desc, attachments: finalAtts, is_important: document.getElementById('edit-important').checked ? 1 : 0 })
+                    body: JSON.stringify({ id: currentTask.id, subject, date, description: desc, attachments: finalAtts })
                 });
 
                 closeModalById('edit-hw-modal');
@@ -3034,13 +2760,13 @@
 
         function createHWCard(task, dateKey) {
             const card = document.createElement('div');
-            const isNew = newlyAddedIds.has(String(task.id));
-            card.className = 'hw-card' + (isNew ? ' new-task' : '') + (task.is_important ? ' important' : '');
+            card.className = 'hw-card';
             card.dataset.id = String(task.id);
+            const isNew = newlyAddedIds.has(String(task.id));
+            if (isNew) card.classList.add('new-task');
             card.style.animation = `slideUpFade 0.45s cubic-bezier(0.2,0.8,0.2,1) forwards ${isNew ? 0 : 0.02}s`;
             const clip = (task.attachments?.length) ? " 📎" : "";
-            const impB = task.is_important ? '<div class="imp-badge">🔴 Важливе</div>' : '';
-            card.innerHTML = `${impB}<div class="subj-title">${escapeHTML(task.subject)}${clip}</div><div class="hw-short">${escapeHTML(task.description)}</div>`;
+            card.innerHTML = `<div class="subj-title">${escapeHTML(task.subject)}${clip}</div><div class="hw-short">${escapeHTML(task.description)}</div>`;
             card.onclick = () => openModal('detail-modal', () => fillDetailModal({ ...task, date: dateKey }));
             return card;
         }
@@ -3048,8 +2774,7 @@
         function reconcileHWList(dateKey, opts = {}) {
             const { forceRebuild = false } = opts;
             const c = document.getElementById('hw-container');
-            const raw = hwData[dateKey]?.tasks || [];
-            const tasks = [...raw.filter(t => t.is_important), ...raw.filter(t => !t.is_important)];
+            const tasks = hwData[dateKey]?.tasks || [];
             if (!tasks.length) {
                 if (!c.dataset.emptyShown || forceRebuild) {
                     c.dataset.emptyShown = "1";
@@ -3068,14 +2793,10 @@
                 const id = String(t.id), found = existing.get(id);
                 if (!found) c.appendChild(createHWCard(t, dateKey));
                 else {
-                    found.classList.toggle('important', !!t.is_important);
                     const clip = (t.attachments?.length) ? " 📎" : "";
-                    const impB = t.is_important ? '<div class="imp-badge">🔴 Важливе</div>' : '';
+                    const titleText = `${t.subject}${clip}`;
                     const te = found.querySelector('.subj-title'), de = found.querySelector('.hw-short');
-                    let ib = found.querySelector('.imp-badge');
-                    if (t.is_important && !ib) { found.insertAdjacentHTML('afterbegin', '<div class="imp-badge">🔴 Важливе</div>'); }
-                    else if (!t.is_important && ib) ib.remove();
-                    if (te && te.textContent !== `${t.subject}${clip}`) te.textContent = `${t.subject}${clip}`;
+                    if (te && te.textContent !== titleText) te.textContent = titleText;
                     if (de && de.textContent !== t.description) de.textContent = t.description;
                     found.onclick = () => openModal('detail-modal', () => fillDetailModal({ ...t, date: dateKey }));
                 }
@@ -3192,18 +2913,18 @@
 
             const list = document.getElementById('all-hw-list');
             list.innerHTML = '';
-            const _filtered = allHWData.filter(t => isDate ? t.date === currentActiveFilter : t.subject === currentActiveFilter);
-            const _sorted = [..._filtered.filter(t => t.is_important), ..._filtered.filter(t => !t.is_important)];
-            _sorted.forEach((task, i) => {
+            allHWData
+                .filter(t => isDate ? t.date === currentActiveFilter : t.subject === currentActiveFilter)
+                .forEach((task, i) => {
                     const card = document.createElement('div');
-                    card.className = `hw-card${newlyAddedIds.has(String(task.id)) ? ' new-task' : ''}${task.is_important ? ' important' : ''}`;
+                    card.className = `hw-card ${newlyAddedIds.has(String(task.id)) ? 'new-task' : ''}`;
                     card.style.animation = `slideUpFade .4s forwards ${i * 0.05}s`;
                     const clip = (task.attachments?.length) ? " 📎" : "";
                     const titleText = isDate
                         ? task.subject
                         : new Date(task.date + "T00:00:00").toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
-                    const impB = task.is_important ? '<div class="imp-badge">🔴 Важливе</div>' : '';
-                    card.innerHTML = `${impB}<div class="subj-title">${escapeHTML(titleText)}${clip}</div><div class="hw-short">${escapeHTML(task.description)}</div>`;
+
+                    card.innerHTML = `<div class="subj-title">${escapeHTML(titleText)}${clip}</div><div class="hw-short">${escapeHTML(task.description)}</div>`;
                     card.onclick = () => openModal('detail-modal', () => fillDetailModal(task));
                     list.appendChild(card);
                 });
@@ -3214,8 +2935,7 @@
             const list = document.getElementById('all-hw-list');
             list.innerHTML = '';
 
-            const _raw = allHWData.filter(t => isDate ? t.date === currentActiveFilter : t.subject === currentActiveFilter);
-            const tasks = [..._raw.filter(t => t.is_important), ..._raw.filter(t => !t.is_important)];
+            const tasks = allHWData.filter(t => isDate ? t.date === currentActiveFilter : t.subject === currentActiveFilter);
 
             if (!tasks.length) {
                 list.innerHTML = '<div class="empty-state">Немає завдань</div>';
@@ -3224,14 +2944,15 @@
 
             tasks.forEach((task, i) => {
                 const card = document.createElement('div');
-                card.className = `hw-card${newlyAddedIds.has(String(task.id)) ? ' new-task' : ''}${task.is_important ? ' important' : ''}`;
+                card.className = `hw-card ${newlyAddedIds.has(String(task.id)) ? 'new-task' : ''}`;
                 card.style.animation = `slideUpFade .4s forwards ${i * 0.05}s`;
+
                 const clip = (task.attachments?.length) ? " 📎" : "";
                 const titleText = isDate
                     ? task.subject
                     : new Date(task.date + "T00:00:00").toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
-                const impBL = task.is_important ? '<div class="imp-badge">🔴 Важливе</div>' : '';
-                card.innerHTML = `${impBL}<div class="subj-title">${escapeHTML(titleText)}${clip}</div><div class="hw-short">${escapeHTML(task.description)}</div>`;
+
+                card.innerHTML = `<div class="subj-title">${escapeHTML(titleText)}${clip}</div><div class="hw-short">${escapeHTML(task.description)}</div>`;
                 card.onclick = () => openModal('detail-modal', () => fillDetailModal(task));
                 list.appendChild(card);
             });
@@ -3297,18 +3018,7 @@
         // (залишив без змін)
 
         // ========= START =========
-        (function runIntro() {
-            const el = document.getElementById('intro-overlay');
-            if (!el) { fetchHW({ silent: false }); return; }
-            // Перший fetchHW — без loading overlay щоб інтро не накривалось
-            fetchHW({ silent: false, showOverlay: false });
-            setTimeout(() => {
-                el.classList.add('out');
-                el.addEventListener('animationend', () => {
-                    el.classList.add('gone');
-                }, { once: true });
-            }, 1600);
-        })();
+        fetchHW({ silent: false });
         setInterval(() => { if (!modalStack.includes('edit-hw-modal')) fetchHW({ silent: true, showOverlay: false }) }, 10000);
     </script>
 </body>
