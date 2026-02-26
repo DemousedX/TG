@@ -39,7 +39,7 @@ WEBHOOK_PATH = "/webhook/telegram"
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 UPLOAD_DIR = "uploads"
-START_WEBAPP = ""  # заповнюється в lifespan
+START_WEBAPP = f"https://t.me/{os.getenv('BOT_USERNAME', '')}?start=webapp"  # deep-link для груп
 MAX_UPLOAD_MB = 60
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 
@@ -260,7 +260,7 @@ def kb_main(chat_type: str):
     else:
         open_btn = InlineKeyboardButton(
             "🤖 Відкрити в боті",
-            url=START_WEBAPP,   # <- відкриває приватний чат з ботом
+            url=START_WEBAPP or WEB_APP_URL,  # fallback якщо ще не ініціалізовано
         )
 
     return kb(
@@ -637,6 +637,12 @@ async def lifespan(app: FastAPI):
 
     if ptb_app:
         await ptb_app.initialize()
+
+        # Формуємо deep-link для груп після initialize (бот знає свій username)
+        global START_WEBAPP
+        bot_me = await ptb_app.bot.get_me()
+        START_WEBAPP = f"https://t.me/{bot_me.username}?start=webapp"
+        log.info("START_WEBAPP = %s", START_WEBAPP)
 
         # Команди
         await ptb_app.bot.set_my_commands([
