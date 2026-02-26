@@ -295,11 +295,14 @@ async def delete_msg(msg):
 
 async def go_main(q, ctx):
     chat_type = q.message.chat.type  # <- важливо
-    await q.edit_message_text(
-        HEADER_MAIN,
-        parse_mode="Markdown",
-        reply_markup=kb_main(chat_type),
-    )
+    try:
+        await q.edit_message_text(
+            HEADER_MAIN,
+            parse_mode="Markdown",
+            reply_markup=kb_main(chat_type),
+        )
+    except Exception:
+        pass
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
@@ -369,12 +372,18 @@ async def cb_close_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     try:
         await q.message.delete()
     except Exception:
-        await q.edit_message_reply_markup(reply_markup=None)
+        try:
+            await q.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
 
 async def cb_menu_schedule(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-    await q.edit_message_text(HEADER_SCHED, parse_mode="Markdown", reply_markup=kb_schedule_days())
+    try:
+        await q.edit_message_text(HEADER_SCHED, parse_mode="Markdown", reply_markup=kb_schedule_days())
+    except Exception:
+        pass
 
 async def cb_sched_day(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -392,22 +401,28 @@ async def cb_sched_day(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 subj = subjects[lesson_num - 1]
                 text += f"╭─ *{num}.* {ei(subj)} {subj}\n╰─ {start} – {end}\n"
 
-    await q.edit_message_text(
-        text,
-        parse_mode="Markdown",
-        reply_markup=kb([_back("menu_schedule", "◀️  До розкладу")], [_back()])
-    )
+    try:
+        await q.edit_message_text(
+            text,
+            parse_mode="Markdown",
+            reply_markup=kb([_back("menu_schedule", "◀️  До розкладу")], [_back()])
+        )
+    except Exception:
+        pass
 
 async def cb_menu_sub(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     rec = sub_get(update.effective_chat.id)
     status = f"✅ *Активна* — {'в групу 👥' if rec and rec['mode']=='group' else 'приватно 👤'}" if rec else "❌ *Не активна*"
-    await q.edit_message_text(
-        f"🔔 *Підписка*\n{DIV}\n\nСтатус: {status}\n\nЩодня о *08:00* надходить список Д/З на поточний день.",
-        parse_mode="Markdown",
-        reply_markup=kb_sub(bool(rec))
-    )
+    try:
+        await q.edit_message_text(
+            f"🔔 *Підписка*\n{DIV}\n\nСтатус: {status}\n\nЩодня о *08:00* надходить список Д/З на поточний день.",
+            parse_mode="Markdown",
+            reply_markup=kb_sub(bool(rec))
+        )
+    except Exception:
+        pass
 
 async def cb_sub_private(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -415,48 +430,60 @@ async def cb_sub_private(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.type != "private":
         return await q.answer("⚠️ Тільки в приватному чаті!", show_alert=True)
     sub_add(update.effective_chat.id, update.effective_user.first_name, "private")
-    await q.edit_message_text(
-        f"✅ *Підписку оформлено!*\n{DIV}\n\n👤 Нагадування щодня о *08:00*.",
-        parse_mode="Markdown",
-        reply_markup=kb([_back()])
-    )
+    try:
+        await q.edit_message_text(
+            f"✅ *Підписку оформлено!*\n{DIV}\n\n👤 Нагадування щодня о *08:00*.",
+            parse_mode="Markdown",
+            reply_markup=kb([_back()])
+        )
+    except Exception:
+        pass
 
 async def cb_sub_group_info(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-    await q.edit_message_text(
-        f"👥 *Підписка групи*\n{DIV}\n\n1️⃣  Додай бота до групи\n2️⃣  Напиши в групі /start\n3️⃣  Готово\n\n💡 Група отримуватиме Д/З о *08:00*.",
-        parse_mode="Markdown",
-        reply_markup=kb([_back("menu_sub")])
-    )
+    try:
+        await q.edit_message_text(
+            f"👥 *Підписка групи*\n{DIV}\n\n1️⃣  Додай бота до групи\n2️⃣  Напиши в групі /start\n3️⃣  Готово\n\n💡 Група отримуватиме Д/З о *08:00*.",
+            parse_mode="Markdown",
+            reply_markup=kb([_back("menu_sub")])
+        )
+    except Exception:
+        pass
 
 async def cb_sub_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     sub_remove(update.effective_chat.id)
-    await q.edit_message_text(
-        f"🚫 *Підписку скасовано*\n{DIV}\n\nРанкові нагадування вимкнено.",
-        parse_mode="Markdown",
-        reply_markup=kb([_back()])
-    )
+    try:
+        await q.edit_message_text(
+            f"🚫 *Підписку скасовано*\n{DIV}\n\nРанкові нагадування вимкнено.",
+            parse_mode="Markdown",
+            reply_markup=kb([_back()])
+        )
+    except Exception:
+        pass
 
 async def cb_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-    await q.edit_message_text(
-        f"❓ *Довідка*\n{DIV}\n\n"
-        "📱 *Щоденник* — відкриває міні-додаток, де зберігаються всі завдання.\n\n"
-        "📎 *Вкладення* — можна додати pdf/фото/відео до завдання.\n\n"
-        "📆 *Розклад* — уроки і час дзвінків по днях тижня.\n"
-        "🔔 *Підписка* — щоденне нагадування про Д/З о 08:00.\n"
-        f"{DIV}\n"
-        "🤖 *Команди:*\n"
-        "/menu — головне меню\n"
-        "/schedule — розклад\n\n"
-        "🧹 Старі завдання автоматично видаляються.",
-        parse_mode="Markdown",
-        reply_markup=kb([_back()])
-    )
+    try:
+        await q.edit_message_text(
+            f"❓ *Довідка*\n{DIV}\n\n"
+            "📱 *Щоденник* — відкриває міні-додаток, де зберігаються всі завдання.\n\n"
+            "📎 *Вкладення* — можна додати pdf/фото/відео до завдання.\n\n"
+            "📆 *Розклад* — уроки і час дзвінків по днях тижня.\n"
+            "🔔 *Підписка* — щоденне нагадування про Д/З о 08:00.\n"
+            f"{DIV}\n"
+            "🤖 *Команди:*\n"
+            "/menu — головне меню\n"
+            "/schedule — розклад\n\n"
+            "🧹 Старі завдання автоматично видаляються.",
+            parse_mode="Markdown",
+            reply_markup=kb([_back()])
+        )
+    except Exception:
+        pass
 
 async def _broadcast(bot, text: str):
     """Розсилає повідомлення всім підписникам."""
@@ -639,6 +666,11 @@ async def lifespan(app: FastAPI):
         ptb_app.add_handler(CallbackQueryHandler(cb_sub_cancel, pattern="^sub_cancel$"))
         ptb_app.add_handler(CallbackQueryHandler(cb_help, pattern="^help$"))
 
+        async def error_handler(update: object, ctx: ContextTypes.DEFAULT_TYPE):
+            log.error("PTB error: %s", ctx.error, exc_info=ctx.error)
+
+        ptb_app.add_error_handler(error_handler)
+
         # Jobs
         jq = ptb_app.job_queue
         jq.run_daily(job_morning, time=time(hour=8, minute=0, tzinfo=KYIV_TZ))
@@ -672,8 +704,11 @@ fastapi_app = FastAPI(lifespan=lifespan)
 async def telegram_webhook(request: Request):
     if not ptb_app:
         return JSONResponse({"status": "no bot"}, status_code=503)
-    update = Update.de_json(await request.json(), ptb_app.bot)
-    await ptb_app.process_update(update)
+    try:
+        update = Update.de_json(await request.json(), ptb_app.bot)
+        await ptb_app.process_update(update)
+    except Exception as e:
+        log.error("Webhook processing error: %s", e)
     return JSONResponse({"status": "ok"})
 
 @fastapi_app.get("/files/{stored_name}")
