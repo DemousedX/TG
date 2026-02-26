@@ -16,7 +16,7 @@ from typing import List, Dict, Any
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from fastapi import FastAPI, Request, UploadFile, File
+from fastapi import FastAPI, Request, UploadFile, File, Response
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from telegram import (
     Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup,
@@ -33,9 +33,15 @@ if not TOKEN:
     log = logging.getLogger(__name__)
     log.warning("❌ BOT_TOKEN не задано.")
 
-WEB_APP_URL  = os.getenv("WEB_APP_URL",  "https://tg-0ncg.onrender.com")
-WEBHOOK_URL  = os.getenv("WEBHOOK_URL",  "https://tg-0ncg.onrender.com")  # задати на Render = той самий домен
+WEB_APP_URL  = os.getenv("WEB_APP_URL",  os.getenv("RENDER_EXTERNAL_URL", "https://tg-0ncg.onrender.com"))
+
+# Render часто задає публічний URL у змінній RENDER_EXTERNAL_URL. Якщо її нема — бери WEBHOOK_URL.
+WEBHOOK_URL  = os.getenv("WEBHOOK_URL") or os.getenv("RENDER_EXTERNAL_URL") or "https://tg-0ncg.onrender.com"
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")  # бажано задати на Render (будь-який рандомний рядок)
 WEBHOOK_PATH = "/webhook/telegram"
+
+# Вмикається лише якщо успішно встановили secret_token у setWebhook
+WEBHOOK_SECRET_ACTIVE = False
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 UPLOAD_DIR = "uploads"
@@ -45,6 +51,9 @@ MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 
 logging.basicConfig(format="%(asctime)s [%(levelname)s] %(name)s: %(message)s", level=logging.INFO)
 log = logging.getLogger(__name__)
+
+# Не логуємо httpx запити на INFO, щоб випадково не світити BOT_TOKEN в URL
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 KYIV_TZ = ZoneInfo("Europe/Kyiv")
 
@@ -647,19 +656,36 @@ async def lifespan(app: FastAPI):
 
         # 🔥 ТІЛЬКИ WEBHOOK
         if not WEBHOOK_URL:
-            raise RuntimeError("WEBHOOK_URL must be set on Render")
+            raise RuntimeError("WEBHOOK_URL must be set (or RENDER_EXTERNAL_URL must exist)")
 
-        await ptb_app.bot.delete_webhook(drop_pending_updates=True)
+        webhook_url = WEBHOOK_URL.rstrip('/') + WEBHOOK_PATH
 
-        webhook_url = WEBHOOK_URL.rstrip("/") + WEBHOOK_PATH
-        await ptb_app.bot.set_webhook(webhook_url)
+        # Важливо: не роби deleteWebhook на кожному старті — це може ламати доставку апдейтів при рестартах
+        # і не використовуй drop_pending_updates=True без причини (інакше втрачатимеш повідомлення).
+        global WEBHOOK_SECRET_ACTIVE
+        WEBHOOK_SECRET_ACTIVE = False
 
-        log.info("Webhook set to %s", webhook_url)
+        try:
+            if WEBHOOK_SECRET:
+                await ptb_app.bot.set_webhook(
+                    url=webhook_url,
+                    secret_token=WEBHOOK_SECRET,
+                    drop_pending_updates=False,
+                )
+                WEBHOOK_SECRET_ACTIVE = True
+            else:
+                await ptb_app.bot.set_webhook(url=webhook_url, drop_pending_updates=False)
+        except TypeError:
+            # На випадок старої версії python-telegram-bot без secret_token/drop_pending_updates в set_webhook
+            await ptb_app.bot.set_webhook(webhook_url)
+            WEBHOOK_SECRET_ACTIVE = False
+
+        log.info('Webhook set to %s', webhook_url)
 
     yield
 
     if ptb_app:
-        await ptb_app.bot.delete_webhook()
+        # Не видаляй webhook на shutdown — Render може робити рестарти, і ти випадково "вимкнеш" бота
         await ptb_app.stop()
         await ptb_app.shutdown()
 
@@ -669,7 +695,19 @@ fastapi_app = FastAPI(lifespan=lifespan)
 async def telegram_webhook(request: Request):
     if not ptb_app:
         return JSONResponse({"status": "no bot"}, status_code=503)
-    update = Update.de_json(await request.json(), ptb_app.bot)
+
+    # Якщо webhook поставлений із secret_token — Telegram пришле цей заголовок (і ми його перевіряємо).
+    if WEBHOOK_SECRET_ACTIVE:
+        if request.headers.get("X-Telegram-Bot-Api-Secret-Token") != WEBHOOK_SECRET:
+            return JSONResponse({"status": "forbidden"}, status_code=403)
+
+    try:
+        payload = await request.json()
+        update = Update.de_json(payload, ptb_app.bot)
+    except Exception as e:
+        log.warning('Bad webhook payload: %s', e)
+        return JSONResponse({"status": "bad_request"}, status_code=400)
+
     await ptb_app.process_update(update)
     return JSONResponse({"status": "ok"})
 
@@ -679,6 +717,11 @@ async def get_file(stored_name: str):
     if not os.path.exists(path):
         return JSONResponse({"status": "error", "message": "File not found"}, status_code=404)
     return FileResponse(path, filename=stored_name)
+
+@fastapi_app.head("/")
+async def head_root():
+    # Render інколи робить health-check методом HEAD на / і може перезапускати сервіс, якщо не 2xx
+    return Response(status_code=200)
 
 @fastapi_app.get("/", response_class=HTMLResponse)
 async def read_root():
