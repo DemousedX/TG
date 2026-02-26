@@ -1,7 +1,7 @@
 """
 ╔══════════════════════════════════════════╗
-║        ЩОДЕННИК КЛАСУ  •  v5.6+          ║
-║  FastAPI + Telegram Bot (Unified, Stable)║
+║        ЩОДЕННИК КЛАСУ  •  Stable         ║
+║  FastAPI + Telegram Bot (Unified)        ║
 ║        PostgreSQL Cloud Edition          ║
 ╚══════════════════════════════════════════╝
 """
@@ -57,14 +57,17 @@ MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 
 KYIV_TZ = ZoneInfo("Europe/Kyiv")
 
+
 def today_kyiv() -> date:
     return datetime.now(KYIV_TZ).date()
+
 
 # ==========================================================
 # 🗓 DATA
 # ==========================================================
-DAYS_UA = ["Понеділок","Вівторок","Середа","Четвер","П'ятниця","Субота","Неділя"]
+DAYS_UA = ["Понеділок", "Вівторок", "Середа", "Четвер", "П'ятниця", "Субота", "Неділя"]
 
+# ✅ Виправлений розклад (Мистецтво ДРУГИМ у середу)
 SCHEDULE = {
     "Понеділок": ["Алгебра", "Фізика", "Інформатика", "Фізкультура", "Англ. Мова", "Біологія", "Технології"],
     "Вівторок":  ["Хімія", "Геометрія", "Укр. Мова", "Укр. Літ", "Фізкультура", "Фізика"],
@@ -74,37 +77,38 @@ SCHEDULE = {
 }
 
 BELLS = [
-    (1,"09:00","09:45"),(2,"09:55","10:40"),(3,"10:50","11:35"),
-    (4,"11:45","12:30"),(0,"12:30","13:00"),
-    (5,"13:00","13:45"),(6,"13:55","14:40"),
-    (7,"14:50","15:35"),(8,"15:45","16:30"),
+    (1, "09:00", "09:45"), (2, "09:55", "10:40"), (3, "10:50", "11:35"),
+    (4, "11:45", "12:30"), (0, "12:30", "13:00"),
+    (5, "13:00", "13:45"), (6, "13:55", "14:40"),
+    (7, "14:50", "15:35"), (8, "15:45", "16:30"),
 ]
 
 EMOJI = {
-    "Алгебра":"📐","Геометрія":"📏","Фізика":"⚛️","Хімія":"🧪","Біологія":"🌿",
-    "Географія":"🌍","Астрономія":"🔭","Інформатика":"💻",
-    "Технології":"🔧","Англ. Мова":"🇬🇧","Укр. Мова":"🇺🇦",
-    "Укр. Літ":"📖","Зар. Літ":"📚","Історія":"🏛️","Історія України":"🏳️",
-    "Мистецтво":"🎨","Фізкультура":"⚽",
+    "Алгебра": "📐", "Геометрія": "📏", "Фізика": "⚛️", "Хімія": "🧪", "Біологія": "🌿",
+    "Географія": "🌍", "Астрономія": "🔭", "Інформатика": "💻",
+    "Технології": "🔧", "Англ. Мова": "🇬🇧", "Укр. Мова": "🇺🇦",
+    "Укр. Літ": "📖", "Зар. Літ": "📚", "Історія": "🏛️", "Історія України": "🏳️",
+    "Мистецтво": "🎨", "Фізкультура": "⚽",
 }
+
+
 def ei(s: str) -> str:
     return EMOJI.get(s, "📌")
 
+
 DIV = "▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔"
-HEADER_MAIN  = f"📚 *Щоденник Класу*\n{DIV}\nОбери розділ:"
+HEADER_MAIN = f"📚 *Щоденник Класу*\n{DIV}\nОбери розділ:"
 HEADER_SCHED = f"📆 *Розклад уроків*\n{DIV}\nОбери день:"
 
+
 # ==========================================================
-# 🗄 DB (POOL + THREADSAFE EXEC)
+# 🗄 DB (POOL + SAFE EXEC)
 # ==========================================================
 @dataclass
 class DB:
     pool: ThreadedConnectionPool
 
     def _exec(self, query: str, params: Optional[Sequence[Any]] = None, fetch: str = "none"):
-        """
-        fetch: "none" | "one" | "all"
-        """
         conn = self.pool.getconn()
         try:
             conn.autocommit = True
@@ -118,31 +122,29 @@ class DB:
         finally:
             self.pool.putconn(conn)
 
+
 _db: Optional[DB] = None
+
 
 async def db_exec(query: str, params: Optional[Sequence[Any]] = None, fetch: str = "none"):
     if _db is None:
         raise RuntimeError("Database is not initialized")
     return await run_in_threadpool(_db._exec, query, params, fetch)
 
+
 async def init_db():
     os.makedirs(UPLOAD_DIR, exist_ok=True)
+
     if not DATABASE_URL:
         log.warning("DATABASE_URL is not set — DB features disabled.")
         return
 
     global _db
     if _db is None:
-        # conservative pool size for Render
-        pool = ThreadedConnectionPool(
-            minconn=1,
-            maxconn=6,
-            dsn=DATABASE_URL,
-        )
+        pool = ThreadedConnectionPool(minconn=1, maxconn=6, dsn=DATABASE_URL)
         _db = DB(pool=pool)
 
     # migrations / schema
-    # Do not crash on already-exists: use IF NOT EXISTS / try-catch only where needed
     try:
         await db_exec("ALTER TABLE homework ADD COLUMN IF NOT EXISTS is_important INTEGER DEFAULT 0")
     except Exception as e:
@@ -161,6 +163,7 @@ async def init_db():
             is_important INTEGER DEFAULT 0
         )
     """)
+
     await db_exec("""
         CREATE TABLE IF NOT EXISTS subscribers(
             chat_id BIGINT PRIMARY KEY,
@@ -169,6 +172,7 @@ async def init_db():
             title TEXT
         )
     """)
+
     await db_exec("""
         CREATE TABLE IF NOT EXISTS attachments(
             id SERIAL PRIMARY KEY,
@@ -181,6 +185,7 @@ async def init_db():
         )
     """)
 
+
 async def close_db():
     global _db
     if _db is not None:
@@ -190,17 +195,14 @@ async def close_db():
             pass
         _db = None
 
+
 async def hw_cleanup() -> int:
     if not DATABASE_URL:
         return 0
     cutoff = (today_kyiv() - timedelta(days=3)).isoformat()
-    # rowcount isn't directly returned via our helper, so fetch affected via RETURNING
-    rows = await db_exec(
-        "DELETE FROM homework WHERE due_date < %s RETURNING id",
-        (cutoff,),
-        fetch="all"
-    )
+    rows = await db_exec("DELETE FROM homework WHERE due_date < %s RETURNING id", (cutoff,), fetch="all")
     return len(rows or [])
+
 
 async def sub_get(chat_id: int) -> Optional[Dict[str, Any]]:
     if not DATABASE_URL:
@@ -210,6 +212,7 @@ async def sub_get(chat_id: int) -> Optional[Dict[str, Any]]:
         (chat_id,),
         fetch="one"
     )
+
 
 async def sub_add(chat_id: int, username: str, mode: str = "private", title: Optional[str] = None):
     if not DATABASE_URL:
@@ -224,16 +227,19 @@ async def sub_add(chat_id: int, username: str, mode: str = "private", title: Opt
         (chat_id, username, mode, title)
     )
 
+
 async def sub_remove(chat_id: int):
     if not DATABASE_URL:
         return
     await db_exec("DELETE FROM subscribers WHERE chat_id=%s", (chat_id,))
+
 
 async def sub_all() -> List[Dict[str, Any]]:
     if not DATABASE_URL:
         return []
     rows = await db_exec("SELECT chat_id FROM subscribers", fetch="all")
     return list(rows or [])
+
 
 async def _attachments_for_hw_ids(ids: List[int]) -> Dict[int, List[Dict[str, Any]]]:
     if not DATABASE_URL or not ids:
@@ -256,11 +262,13 @@ async def _attachments_for_hw_ids(ids: List[int]) -> Dict[int, List[Dict[str, An
         out.setdefault(hw_id, []).append({
             "id": int(r["id"]),
             "name": r["original_name"],
+            "stored_name": r["stored_name"],
             "url": f"/files/{r['stored_name']}",
             "mime": r["mime_type"] or "",
             "size": int(r["size_bytes"] or 0),
         })
     return out
+
 
 async def hw_for_date_formatted(d: str) -> List[Dict[str, Any]]:
     if not DATABASE_URL:
@@ -291,12 +299,17 @@ async def hw_for_date_formatted(d: str) -> List[Dict[str, Any]]:
         "attachments": att_map.get(int(r["id"]), [])
     } for r in rows]
 
+
+# ==========================================================
+# 📁 FILE SAFETY
+# ==========================================================
 def _safe_ext(filename: str) -> str:
     _, ext = os.path.splitext(filename or "")
     ext = (ext or "").lower().strip()
     if len(ext) > 12:
         return ""
     return ext
+
 
 def _delete_file_quiet(stored_name: str):
     try:
@@ -306,17 +319,20 @@ def _delete_file_quiet(stored_name: str):
     except Exception:
         pass
 
-# only allow our generated names: hex + optional ext
+
 _STORED_RE = re.compile(r"^[a-f0-9]{32}(\.[a-z0-9]{1,12})?$", re.IGNORECASE)
+
 
 # ==========================================================
 # 🤖 TELEGRAM BOT UI
 # ==========================================================
-def kb(*rows): 
+def kb(*rows):
     return InlineKeyboardMarkup(list(rows))
+
 
 def _back(cb: str = "go_main", label: str = "◀️  Назад"):
     return InlineKeyboardButton(label, callback_data=cb)
+
 
 def kb_main(chat_type: str, start_webapp: str):
     if chat_type == ChatType.PRIVATE:
@@ -332,11 +348,13 @@ def kb_main(chat_type: str, start_webapp: str):
         [InlineKeyboardButton("✖  Закрити меню", callback_data="close_menu")],
     )
 
+
 def kb_schedule_days():
     btns = [InlineKeyboardButton(d, callback_data=f"sched_{d}") for d in SCHEDULE]
-    rows = [[btns[i], btns[i+1]] if i+1 < len(btns) else [btns[i]] for i in range(0, len(btns), 2)]
+    rows = [[btns[i], btns[i + 1]] if i + 1 < len(btns) else [btns[i]] for i in range(0, len(btns), 2)]
     rows.append([_back()])
     return InlineKeyboardMarkup(rows)
+
 
 def kb_sub(is_sub: bool):
     rows = [
@@ -348,17 +366,20 @@ def kb_sub(is_sub: bool):
     rows.append([_back()])
     return InlineKeyboardMarkup(rows)
 
+
 async def delete_msg(msg):
     try:
         await msg.delete()
     except Exception:
         pass
 
+
 # ==========================================================
 # 🤖 BOT HANDLERS
 # ==========================================================
 ptb_app: Optional[Application] = None
 START_WEBAPP = ""
+
 
 async def go_main(q, ctx):
     chat_type = q.message.chat.type
@@ -368,8 +389,9 @@ async def go_main(q, ctx):
             parse_mode="Markdown",
             reply_markup=kb_main(chat_type, START_WEBAPP),
         )
-    except Exception as e:
-        log.debug("go_main edit failed: %s", e)
+    except Exception:
+        pass
+
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
@@ -408,6 +430,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if chat_type != ChatType.PRIVATE:
         await delete_msg(update.message)
 
+
 async def cmd_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat_type = update.effective_chat.type
     await update.message.reply_text(
@@ -416,15 +439,18 @@ async def cmd_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if chat_type != ChatType.PRIVATE:
         await delete_msg(update.message)
 
+
 async def cmd_schedule(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(HEADER_SCHED, parse_mode="Markdown", reply_markup=kb_schedule_days())
     if update.effective_chat.type != ChatType.PRIVATE:
         await delete_msg(update.message)
 
+
 async def cb_go_main(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     await go_main(q, ctx)
+
 
 async def cb_close_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -437,6 +463,7 @@ async def cb_close_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
 
+
 async def cb_menu_schedule(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -444,6 +471,7 @@ async def cb_menu_schedule(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await q.edit_message_text(HEADER_SCHED, parse_mode="Markdown", reply_markup=kb_schedule_days())
     except Exception:
         pass
+
 
 async def cb_sched_day(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -470,11 +498,12 @@ async def cb_sched_day(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
 
+
 async def cb_menu_sub(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     rec = await sub_get(update.effective_chat.id)
-    status = f"✅ *Активна* — {'в групу 👥' if rec and rec['mode']=='group' else 'приватно 👤'}" if rec else "❌ *Не активна*"
+    status = f"✅ *Активна* — {'в групу 👥' if rec and rec['mode'] == 'group' else 'приватно 👤'}" if rec else "❌ *Не активна*"
     try:
         await q.edit_message_text(
             f"🔔 *Підписка*\n{DIV}\n\nСтатус: {status}\n\nЩодня о *08:00* надходить список Д/З на поточний день.",
@@ -483,6 +512,7 @@ async def cb_menu_sub(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
     except Exception:
         pass
+
 
 async def cb_sub_private(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -499,6 +529,7 @@ async def cb_sub_private(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
 
+
 async def cb_sub_group_info(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -510,6 +541,7 @@ async def cb_sub_group_info(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
     except Exception:
         pass
+
 
 async def cb_sub_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -523,6 +555,7 @@ async def cb_sub_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
     except Exception:
         pass
+
 
 async def cb_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -545,6 +578,7 @@ async def cb_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
 
+
 async def _broadcast(bot, text: str):
     for rec in await sub_all():
         cid = rec["chat_id"]
@@ -553,11 +587,11 @@ async def _broadcast(bot, text: str):
         except Exception as ex:
             log.warning("Broadcast failed %s: %s", cid, ex)
 
+
 # ==========================================================
 # ⏰ JOBS
 # ==========================================================
 async def job_morning(ctx: ContextTypes.DEFAULT_TYPE):
-    """Пн–Пт 08:00 — розклад на сьогодні + список Д/З."""
     today = today_kyiv()
     if today.weekday() >= 5:
         return
@@ -592,7 +626,7 @@ async def job_morning(ctx: ContextTypes.DEFAULT_TYPE):
     if rows:
         text += "📚 *Д/З на сьогодні:*\n"
         for r in rows:
-            imp  = "🔴 " if r.get("is_important") else ""
+            imp = "🔴 " if r.get("is_important") else ""
             clip = " 📎" if r.get("attachments") else ""
             text += (
                 f"╭─ {imp}{ei(r['subject'])} *{r['subject']}*{clip}\n"
@@ -604,8 +638,8 @@ async def job_morning(ctx: ContextTypes.DEFAULT_TYPE):
 
     await _broadcast(ctx.bot, text)
 
+
 async def job_evening(ctx: ContextTypes.DEFAULT_TYPE):
-    """Пн–Пт 18:00 — тільки важливе Д/З на завтра."""
     today = today_kyiv()
     if today.weekday() >= 5:
         return
@@ -633,8 +667,8 @@ async def job_evening(ctx: ContextTypes.DEFAULT_TYPE):
         )
     await _broadcast(ctx.bot, text)
 
+
 async def job_sunday_evening(ctx: ContextTypes.DEFAULT_TYPE):
-    """Нд 18:00 — всі Д/З на понеділок."""
     today = today_kyiv()
     if today.weekday() != 6:
         return
@@ -652,7 +686,7 @@ async def job_sunday_evening(ctx: ContextTypes.DEFAULT_TYPE):
         if has_imp:
             text += "⚠️ *Є важливі завдання!*\n\n"
         for r in rows:
-            imp  = "🔴 " if r.get("is_important") else ""
+            imp = "🔴 " if r.get("is_important") else ""
             clip = " 📎" if r.get("attachments") else ""
             text += (
                 f"╭─ {imp}{ei(r['subject'])} *{r['subject']}*{clip}\n"
@@ -668,20 +702,20 @@ async def job_sunday_evening(ctx: ContextTypes.DEFAULT_TYPE):
 """
     await _broadcast(ctx.bot, text)
 
+
 async def job_cleanup(ctx: ContextTypes.DEFAULT_TYPE):
     n = await hw_cleanup()
     if n:
         log.info("🧹 Автоочищення: %d Д/З видалено", n)
+
 
 # ==========================================================
 # 🌐 FASTAPI + LIFESPAN
 # ==========================================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # DB
     await init_db()
 
-    # BOT
     global ptb_app, START_WEBAPP
 
     if TOKEN:
@@ -720,7 +754,6 @@ async def lifespan(app: FastAPI):
 
         ptb_app.add_error_handler(error_handler)
 
-        # jobs
         jq = ptb_app.job_queue
         jq.run_daily(job_morning, time=time(hour=8, minute=0, tzinfo=KYIV_TZ))
         jq.run_daily(job_evening, time=time(hour=18, minute=0, tzinfo=KYIV_TZ))
@@ -742,7 +775,6 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # shutdown
     if ptb_app:
         try:
             await ptb_app.bot.delete_webhook()
@@ -756,7 +788,9 @@ async def lifespan(app: FastAPI):
 
     await close_db()
 
+
 fastapi_app = FastAPI(lifespan=lifespan)
+
 
 @fastapi_app.post(WEBHOOK_PATH)
 async def telegram_webhook(request: Request):
@@ -770,25 +804,27 @@ async def telegram_webhook(request: Request):
         log.error("Webhook processing error: %s", e)
     return JSONResponse({"status": "ok"})
 
+
 @fastapi_app.head("/")
 async def head_root():
     return Response(status_code=200)
 
+
 @fastapi_app.get("/", response_class=HTMLResponse)
 async def read_root():
-    try:
-        with open("templates/index.html", "r", encoding="utf-8") as f:
-            return f.read()
-    except FileNotFoundError:
-        return "<h1>OK</h1><p>templates/index.html not found.</p>"
+    with open("templates/index.html", "r", encoding="utf-8") as f:
+        return f.read()
+
 
 @fastapi_app.get("/ping")
 async def ping():
     return {"status": "alive", "timestamp": datetime.now(KYIV_TZ).isoformat()}
 
+
 @fastapi_app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     return Response(status_code=204)
+
 
 @fastapi_app.get("/files/{stored_name}")
 async def get_file(stored_name: str):
@@ -798,6 +834,7 @@ async def get_file(stored_name: str):
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(path, filename=stored_name)
+
 
 @fastapi_app.get("/api/hw")
 async def get_hw_api():
@@ -809,6 +846,7 @@ async def get_hw_api():
         label = "Сьогодні" if i == 0 else "Завтра" if i == 1 else target_date.strftime("%d.%m")
         data[iso_date] = {"label": label, "tasks": await hw_for_date_formatted(iso_date)}
     return data
+
 
 @fastapi_app.get("/api/hw_all")
 async def get_hw_all_api():
@@ -840,6 +878,7 @@ async def get_hw_all_api():
         "attachments": att_map.get(int(r["id"]), [])
     } for r in rows]
 
+
 @fastapi_app.post("/api/upload")
 async def api_upload(files: List[UploadFile] = File(...)):
     os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -857,13 +896,12 @@ async def api_upload(files: List[UploadFile] = File(...)):
         try:
             with open(path, "wb") as out:
                 while True:
-                    chunk = await f.read(1024 * 1024)  # 1MB chunks
+                    chunk = await f.read(1024 * 1024)  # 1MB
                     if not chunk:
                         break
                     size += len(chunk)
                     total += len(chunk)
                     if total > MAX_UPLOAD_BYTES:
-                        # cleanup partial file
                         try:
                             out.close()
                         except Exception:
@@ -890,6 +928,7 @@ async def api_upload(files: List[UploadFile] = File(...)):
         })
 
     return {"status": "ok", "files": uploaded}
+
 
 @fastapi_app.post("/api/hw_add")
 async def api_add_hw(request: Request):
@@ -942,6 +981,7 @@ async def api_add_hw(request: Request):
 
     return {"status": "ok"}
 
+
 @fastapi_app.post("/api/hw_delete")
 async def api_delete_hw(request: Request):
     if not DATABASE_URL:
@@ -958,6 +998,7 @@ async def api_delete_hw(request: Request):
 
     await db_exec("DELETE FROM homework WHERE id=%s", (hw_id,))
     return {"status": "ok"}
+
 
 @fastapi_app.post("/api/hw_update")
 async def api_update_hw(request: Request):
@@ -1018,9 +1059,7 @@ async def api_update_hw(request: Request):
 
     return {"status": "ok"}
 
-# ==========================================================
-# 🚀 RUN
-# ==========================================================
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(fastapi_app, host="0.0.0.0", port=8000)
