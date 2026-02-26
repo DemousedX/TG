@@ -23,7 +23,7 @@ from telegram import (
     WebAppInfo, MenuButtonWebApp
 )
 from telegram.constants import ChatType
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 
 # ==========================================
 # ⚙️ НАЛАШТУВАННЯ
@@ -145,6 +145,7 @@ def init_db():
                 title TEXT
             )
         """)
+        c.execute("ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS enabled INTEGER DEFAULT 1")
         c.execute("""
             CREATE TABLE IF NOT EXISTS attachments(
                 id SERIAL PRIMARY KEY,
@@ -164,27 +165,55 @@ def hw_cleanup():
 
 def sub_get(chat_id):
     with dbc() as c:
-        return c.execute("SELECT chat_id,username,mode,title FROM subscribers WHERE chat_id=%s", (chat_id,)).fetchone()
+        return c.execute(
+            "SELECT chat_id,username,mode,title,enabled FROM subscribers WHERE chat_id=%s",
+            (chat_id,)
+        ).fetchone()
 
-def sub_add(chat_id, username, mode="private", title=None):
+def sub_touch(chat_id, username, mode="private", title=None, enabled_default=0):
+    """Оновлює метадані чату, НЕ змінюючи enabled, якщо запис вже існує.
+    enabled_default використовується лише при першому insert.
+    """
     with dbc() as c:
         c.execute(
             """
-            INSERT INTO subscribers(chat_id,username,mode,title) 
-            VALUES(%s,%s,%s,%s) 
-            ON CONFLICT (chat_id) 
+            INSERT INTO subscribers(chat_id,username,mode,title,enabled)
+            VALUES(%s,%s,%s,%s,%s)
+            ON CONFLICT (chat_id)
             DO UPDATE SET username=EXCLUDED.username, mode=EXCLUDED.mode, title=EXCLUDED.title
+            """,
+            (chat_id, username, mode, title, int(enabled_default))
+        )
+
+def sub_enable(chat_id, username, mode="private", title=None):
+    """Явно вмикає підписку (enabled=1)."""
+    with dbc() as c:
+        c.execute(
+            """
+            INSERT INTO subscribers(chat_id,username,mode,title,enabled)
+            VALUES(%s,%s,%s,%s,1)
+            ON CONFLICT (chat_id)
+            DO UPDATE SET username=EXCLUDED.username, mode=EXCLUDED.mode, title=EXCLUDED.title, enabled=1
             """,
             (chat_id, username, mode, title)
         )
 
-def sub_remove(chat_id):
+def sub_disable(chat_id):
+    """Явно вимикає підписку (enabled=0), не видаляючи запис."""
     with dbc() as c:
-        c.execute("DELETE FROM subscribers WHERE chat_id=%s", (chat_id,))
+        c.execute(
+            """
+            INSERT INTO subscribers(chat_id,username,mode,title,enabled)
+            VALUES(%s,NULL,'private',NULL,0)
+            ON CONFLICT (chat_id)
+            DO UPDATE SET enabled=0
+            """,
+            (chat_id,)
+        )
 
 def sub_all():
     with dbc() as c:
-        return c.execute("SELECT chat_id FROM subscribers").fetchall()
+        return c.execute("SELECT chat_id FROM subscribers WHERE enabled=1").fetchall()
 
 def _attachments_for_hw_ids(ids: List[int]) -> Dict[int, List[Dict[str, Any]]]:
     if not ids:
@@ -302,6 +331,15 @@ async def delete_msg(msg):
     except Exception:
         pass
 
+async def delete_private_command(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """В приваті прибирає повідомлення-команди (/menu, /schedule, /start тощо)."""
+    try:
+        if update.effective_chat and update.effective_chat.type == ChatType.PRIVATE and update.message:
+            await delete_msg(update.message)
+    except Exception:
+        pass
+
+
 async def go_main(q, ctx):
     chat_type = q.message.chat.type  # <- важливо
     await q.edit_message_text(
@@ -315,8 +353,14 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     title = chat.title if chat.type != "private" else None
 
-    if not sub_get(chat.id):
-        sub_add(chat.id, u.username or u.first_name, "private" if chat.type == "private" else "group", title)
+    rec = sub_get(chat.id)
+    mode = "private" if chat.type == "private" else "group"
+
+    # Авто-підписка лише при першому /start. Якщо користувач скасував підписку (enabled=0), /start не вмикає її знову.
+    if not rec:
+        sub_enable(chat.id, u.username or u.first_name, mode, title)
+    else:
+        sub_touch(chat.id, u.username or u.first_name, mode, title)
 
     chat_type = chat.type
     payload = (ctx.args[0].strip().lower() if ctx.args else "")
@@ -408,11 +452,16 @@ async def cb_menu_sub(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     rec = sub_get(update.effective_chat.id)
-    status = f"✅ *Активна* — {'в групу 👥' if rec and rec['mode']=='group' else 'приватно 👤'}" if rec else "❌ *Не активна*"
+    is_active = bool(rec and int(rec.get("enabled", 1)) == 1)
+    status = (
+        f"✅ *Активна* — {'в групу 👥' if rec and rec.get('mode')=='group' else 'приватно 👤'}"
+        if is_active else
+        "❌ *Не активна*"
+    )
     await q.edit_message_text(
         f"🔔 *Підписка*\n{DIV}\n\nСтатус: {status}\n\nЩодня о *09:00* надходить список Д/З на поточний день.",
         parse_mode="Markdown",
-        reply_markup=kb_sub(bool(rec))
+        reply_markup=kb_sub(is_active)
     )
 
 async def cb_sub_private(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -420,7 +469,7 @@ async def cb_sub_private(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.answer()
     if update.effective_chat.type != "private":
         return await q.answer("⚠️ Тільки в приватному чаті!", show_alert=True)
-    sub_add(update.effective_chat.id, update.effective_user.first_name, "private")
+    sub_enable(update.effective_chat.id, update.effective_user.first_name, "private")
     await q.edit_message_text(
         f"✅ *Підписку оформлено!*\n{DIV}\n\n👤 Нагадування щодня о *09:00*.",
         parse_mode="Markdown",
@@ -439,7 +488,7 @@ async def cb_sub_group_info(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def cb_sub_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-    sub_remove(update.effective_chat.id)
+    sub_disable(update.effective_chat.id)
     await q.edit_message_text(
         f"🚫 *Підписку скасовано*\n{DIV}\n\nРанкові нагадування вимкнено.",
         parse_mode="Markdown",
@@ -635,6 +684,7 @@ async def lifespan(app: FastAPI):
         ptb_app.add_handler(CommandHandler("start", cmd_start))
         ptb_app.add_handler(CommandHandler("menu", cmd_menu))
         ptb_app.add_handler(CommandHandler("schedule", cmd_schedule))
+        ptb_app.add_handler(MessageHandler(filters.COMMAND & filters.ChatType.PRIVATE, delete_private_command), group=1)
         ptb_app.add_handler(CallbackQueryHandler(cb_close_menu, pattern="^close_menu$"))
         ptb_app.add_handler(CallbackQueryHandler(cb_go_main, pattern="^go_main$"))
         ptb_app.add_handler(CallbackQueryHandler(cb_menu_schedule, pattern="^menu_schedule$"))
