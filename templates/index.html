@@ -623,8 +623,23 @@
             <div style="width:60px;"></div>
         </div>
         <div class="modal-content">
+            <!-- Invite link section -->
             <div class="modal-block">
-                <div class="modal-label">Додати учасника</div>
+                <div class="modal-label">🔗 Запросити за посиланням</div>
+                <div id="invite-link-box" style="display:none;margin-bottom:10px;">
+                    <div style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--muted);word-break:break-all;line-height:1.5;" id="invite-link-text"></div>
+                    <div style="display:flex;gap:8px;margin-top:8px;">
+                        <div class="add-member-btn pressable" style="flex:1;text-align:center;" onclick="copyInviteLink()">📋 Копіювати</div>
+                        <div class="add-member-btn pressable" style="flex:1;text-align:center;background:rgba(191,90,242,.18);" onclick="shareInviteLink()">📤 Поділитись</div>
+                    </div>
+                    <div style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center;">⏳ Дійсне 72 години</div>
+                </div>
+                <div class="add-member-btn pressable" id="btn-gen-invite" onclick="generateInviteLink()" style="width:100%;text-align:center;border-radius:12px;padding:12px;">
+                    ✨ Створити посилання-запрошення
+                </div>
+            </div>
+            <div class="modal-block">
+                <div class="modal-label">Додати вручну (за ID)</div>
                 <div class="add-member-row">
                     <input id="new-member-id" class="ios-input" type="number" placeholder="Telegram User ID" inputmode="numeric">
                     <div class="add-member-btn pressable" onclick="addMember()">Додати</div>
@@ -1235,6 +1250,58 @@
                 else tg.showAlert('Помилка: ' + (data.message || ''));
             } catch(e) { tg.showAlert('Помилка мережі'); }
             finally { hideLoading(); }
+        }
+
+        // ── INVITE LINK ────────────────────────────────────────────────────────
+        let _currentInviteLink = '';
+
+        async function generateInviteLink() {
+            if (!currentUserId) return;
+            const btn = document.getElementById('btn-gen-invite');
+            btn.textContent = '⏳ Генерація…';
+            btn.style.opacity = '.6';
+            try {
+                const res = await fetch('/api/diary/create_invite', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ admin_user_id: currentUserId })
+                });
+                const data = await res.json();
+                if (data.status === 'ok' && data.link) {
+                    _currentInviteLink = data.link;
+                    document.getElementById('invite-link-text').textContent = data.link;
+                    document.getElementById('invite-link-box').style.display = 'block';
+                    btn.textContent = '🔄 Оновити посилання';
+                } else {
+                    tg.showAlert('Помилка: ' + (data.message || 'Невідома'));
+                    btn.textContent = '✨ Створити посилання-запрошення';
+                }
+            } catch(e) {
+                tg.showAlert('Помилка мережі');
+                btn.textContent = '✨ Створити посилання-запрошення';
+            }
+            btn.style.opacity = '1';
+        }
+
+        function copyInviteLink() {
+            if (!_currentInviteLink) return;
+            playVibration('light');
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(_currentInviteLink).then(() => tg.showAlert('✅ Посилання скопійовано!'));
+            } else {
+                tg.showAlert(_currentInviteLink);
+            }
+        }
+
+        function shareInviteLink() {
+            if (!_currentInviteLink) return;
+            playVibration('light');
+            if (tg.shareToStory) {
+                tg.shareToStory(_currentInviteLink);
+            } else if (navigator.share) {
+                navigator.share({ title: 'Щоденник Класу', text: 'Приєднуйся до щоденника!', url: _currentInviteLink }).catch(() => {});
+            } else {
+                copyInviteLink();
+            }
         }
 
         // ── START ──────────────────────────────────────────────────────────────
