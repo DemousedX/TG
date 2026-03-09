@@ -626,19 +626,19 @@
             <!-- Invite link section -->
             <div class="modal-block">
                 <div class="modal-label">🔗 Запросити за посиланням</div>
-                <div id="invite-link-box" style="display:none;margin-bottom:10px;">
-                    <div style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--muted);word-break:break-all;line-height:1.5;" id="invite-link-text"></div>
-                    <div style="display:flex;gap:8px;margin-top:8px;">
-                        <div class="add-member-btn pressable" style="flex:1;text-align:center;" onclick="copyInviteLink()">📋 Копіювати</div>
-                        <div class="add-member-btn pressable" style="flex:1;text-align:center;background:rgba(191,90,242,.18);" onclick="shareInviteLink()">📤 Поділитись</div>
+                <div id="invite-link-box" style="display:none;margin-bottom:12px;">
+                    <div style="background:rgba(255,255,255,.07);border:1px solid var(--border);border-radius:12px;padding:12px 14px;font-size:12px;color:var(--muted);word-break:break-all;line-height:1.6;margin-bottom:10px;" id="invite-link-text"></div>
+                    <div style="display:flex;gap:8px;">
+                        <div class="main-btn pressable" style="flex:1;font-size:13px;padding:12px 0;" onclick="copyInviteLink()">📋 Копіювати</div>
+                        <div class="main-btn pressable" style="flex:1;font-size:13px;padding:12px 0;background:linear-gradient(135deg,rgba(191,90,242,.5),rgba(125,92,255,.4));" onclick="shareInviteLink()">📤 Поділитись</div>
                     </div>
-                    <div style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center;">⏳ Дійсне 72 години</div>
+                    <div style="font-size:11px;color:var(--muted);margin-top:8px;text-align:center;">⏳ Посилання дійсне 72 години</div>
                 </div>
-                <div class="add-member-btn pressable" id="btn-gen-invite" onclick="generateInviteLink()" style="width:100%;text-align:center;border-radius:12px;padding:12px;">
+                <div class="main-btn pressable" id="btn-gen-invite" onclick="generateInviteLink()">
                     ✨ Створити посилання-запрошення
                 </div>
             </div>
-            <div class="modal-block">
+            <div class="modal-block" style="margin-top:4px;">
                 <div class="modal-label">Додати вручну (за ID)</div>
                 <div class="add-member-row">
                     <input id="new-member-id" class="ios-input" type="number" placeholder="Telegram User ID" inputmode="numeric">
