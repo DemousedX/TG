@@ -69,13 +69,42 @@ SCHEDULE_11 = {
 }
 
 # ── 9 клас ───────────────────────────────────────────────────────────────────
+# Урок 7 у Четвер — "Мікс": тиждень 1→Історія України, 2→пусто, 3→Всесвітня Історія, 4→пусто
 SCHEDULE_9 = {
-    "Понеділок": ["Укр. Мова","Алгебра","Геометрія","Англ. Мова","Біологія","Фізкультура"],
-    "Вівторок":  ["Хімія","Укр. Мова","Укр. Літ","Фізика","Алгебра","Інформатика"],
-    "Середа":    ["Геометрія","Укр. Мова","Географія","Мистецтво","Англ. Мова"],
-    "Четвер":    ["Фізика","Алгебра","Хімія","Біологія","Укр. Літ","Технології"],
-    "П'ятниця":  ["Зар. Літ","Укр. Мова","Алгебра","Історія","Фізкультура"],
+    "Понеділок": ["Географія","Англ. Мова","Укр. Мова","Алгебра","Фізика","Правознавство","Укр. Літ."],
+    "Вівторок":  ["Укр. Мова","Біологія","Хімія","Геометрія","Укр. Літ.","Англ. Мова","Фізкультура"],
+    "Середа":    ["Історія України","Історія України","Алгебра","Основи здоров'я","Фізика","Фізкультура","Інформатика"],
+    "Четвер":    ["Хімія","Геометрія","Трудове навчання","Зар. Літ","Фізика","Англ. Мова","Мікс"],
+    "П'ятниця":  ["Зар. Літ","Біологія","Інформатика","Фінансова грамотність","Всесвітня Історія","Фізкультура","Мистецтво"],
 }
+
+MIX_LESSONS_9 = {1: "Історія України", 2: None, 3: "Всесвітня Історія", 4: None}
+
+def resolve_mix_for_week(ref_date: date) -> Optional[str]:
+    """Повертає фактичний урок 'Мікс' для тижня, що містить ref_date."""
+    # Знаходимо четвер цього тижня
+    thursday = ref_date + timedelta(days=(3 - ref_date.weekday()) % 7)
+    week_of_month = (thursday.day - 1) // 7 + 1
+    return MIX_LESSONS_9.get(week_of_month, None)
+
+def get_resolved_schedule_9(ref_date: date) -> dict:
+    """Повертає розклад 9 класу з розрахованим уроком 'Мікс' для заданої дати."""
+    mix = resolve_mix_for_week(ref_date)
+    resolved = {}
+    for day, subjects in SCHEDULE_9.items():
+        if day == "Четвер":
+            day_subjects = []
+            for s in subjects:
+                if s == "Мікс":
+                    if mix:
+                        day_subjects.append(mix)
+                    # якщо mix is None — урок відсутній, просто пропускаємо
+                else:
+                    day_subjects.append(s)
+            resolved[day] = day_subjects
+        else:
+            resolved[day] = subjects
+    return resolved
 
 # Для зворотної сумісності
 SCHEDULE = SCHEDULE_11
@@ -95,9 +124,11 @@ BELLS = [
 EMOJI = {
     "Алгебра":"📐","Геометрія":"📏","Фізика":"⚛️","Хімія":"🧪","Біологія":"🌿",
     "Географія":"🌍","Астрономія":"🔭","Інформатика":"💻",
-    "Технології":"🔧","Англ. Мова":"🇬🇧","Укр. Мова":"🇺🇦",
-    "Укр. Літ":"📖","Зар. Літ":"📚","Історія":"🏛️","Історія України":"🏳️",
-    "Мистецтво":"🎨","Фізкультура":"⚽",
+    "Технології":"🔧","Трудове навчання":"🔨","Англ. Мова":"🇬🇧","Укр. Мова":"🇺🇦",
+    "Укр. Літ":"📖","Укр. Літ.":"📖","Зар. Літ":"📚","Зарубіжна Літ":"📚",
+    "Зарубіжна література":"📚","Історія":"🏛️","Історія України":"🏳️",
+    "Всесвітня Історія":"🌐","Мистецтво":"🎨","Фізкультура":"⚽",
+    "Правознавство":"⚖️","Основи здоров'я":"❤️","Фінансова грамотність":"💰",
 }
 
 def ei(s): return EMOJI.get(s, "📌")
@@ -191,6 +222,15 @@ def init_db():
                 role TEXT DEFAULT 'member',
                 added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (diary_id, user_id)
+            )
+        """)
+
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS diary_invites(
+                code TEXT PRIMARY KEY,
+                diary_id INTEGER NOT NULL REFERENCES diaries(id) ON DELETE CASCADE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP NOT NULL
             )
         """)
 
@@ -309,6 +349,38 @@ def diary_remove_member(diary_id: int, user_id: int) -> bool:
     except Exception as e:
         log.error("diary_remove_member error: %s", e)
         return False
+
+
+def create_diary_invite(diary_id: int, ttl_hours: int = 72) -> str:
+    """Генерує запрошувальний код для щоденника (дійсний ttl_hours годин)."""
+    code = secrets.token_urlsafe(12)
+    expires = datetime.now(KYIV_TZ) + timedelta(hours=ttl_hours)
+    # очистити старі
+    with dbc() as c:
+        c.execute("DELETE FROM diary_invites WHERE expires_at < NOW()")
+        c.execute(
+            "INSERT INTO diary_invites(code, diary_id, expires_at) VALUES(%s,%s,%s)",
+            (code, diary_id, expires)
+        )
+    return code
+
+
+def use_diary_invite(code: str, user_id: int) -> Optional[int]:
+    """Використовує код запрошення: додає user_id до щоденника. Повертає diary_id або None."""
+    try:
+        with dbc() as c:
+            row = c.execute(
+                "SELECT diary_id FROM diary_invites WHERE code=%s AND expires_at > NOW()",
+                (code,)
+            ).fetchone()
+            if not row:
+                return None
+            diary_id = int(row["diary_id"])
+            diary_add_member(diary_id, user_id, "member")
+            return diary_id
+    except Exception as e:
+        log.error("use_diary_invite error: %s", e)
+        return None
 
 
 # ==========================================
@@ -521,6 +593,31 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     chat_type = chat.type
     payload = (ctx.args[0].strip().lower() if ctx.args else "")
+
+    # ── Обробка запрошення ──────────────────────────────────────────────────
+    if payload.startswith("invite_") and chat_type == ChatType.PRIVATE:
+        code = ctx.args[0].strip()[7:]  # original case
+        diary_id = use_diary_invite(code, u.id)
+        if diary_id is not None:
+            try:
+                with dbc() as c:
+                    diary = c.execute("SELECT name FROM diaries WHERE id=%s", (diary_id,)).fetchone()
+                diary_name = diary["name"] if diary else "Щоденник"
+            except Exception:
+                diary_name = "Щоденник"
+            await update.message.reply_text(
+                f"✅ *Вітаємо, {u.first_name}!*\nВас додано до щоденника *{diary_name}* 🎉\n\nВідкрийте додаток:",
+                parse_mode="Markdown",
+                reply_markup=kb_main(chat_type),
+            )
+        else:
+            await update.message.reply_text(
+                "❌ Посилання недійсне або термін дії минув.\nЗверніться до адміністратора щоденника.",
+                parse_mode="Markdown",
+                reply_markup=kb_main(chat_type),
+            )
+        return
+
     if chat_type == ChatType.PRIVATE and payload == "webapp":
         await update.message.reply_text(
             HEADER_MAIN, parse_mode="Markdown", reply_markup=kb_main(chat_type),
@@ -709,7 +806,10 @@ def _get_diary_subscriber_ids(diary_id: Optional[int]) -> List[int]:
 
 
 def _build_morning_text(today: date, diary_id: Optional[int], schedule_key: str) -> str:
-    schedule = SCHEDULES.get(schedule_key, SCHEDULE_11)
+    if schedule_key == "9":
+        schedule = get_resolved_schedule_9(today)
+    else:
+        schedule = SCHEDULES.get(schedule_key, SCHEDULE_11)
     dn = DAYS_UA[today.weekday()]
     subjects = schedule.get(dn, [])
     sched_lines = ""
@@ -954,7 +1054,15 @@ async def read_root():
 async def api_user_context(user_id: Optional[int] = None):
     ctx = get_user_diary_context(user_id)
     schedule_key = ctx["schedule_key"]
-    schedule = SCHEDULES.get(schedule_key, SCHEDULE_11)
+    today = today_kyiv()
+    if schedule_key == "9":
+        schedule = get_resolved_schedule_9(today)
+    else:
+        schedule = SCHEDULES.get(schedule_key, SCHEDULE_11)
+    mix_info = None
+    if schedule_key == "9":
+        mix = resolve_mix_for_week(today)
+        mix_info = mix or "Немає уроку"
     return {
         "diary_id": ctx["diary_id"],
         "is_diary_admin": ctx["is_diary_admin"],
@@ -962,6 +1070,7 @@ async def api_user_context(user_id: Optional[int] = None):
         "schedule_key": schedule_key,
         "name": ctx["name"],
         "schedule": schedule,
+        "mix_info": mix_info,
     }
 
 
@@ -1203,6 +1312,25 @@ async def api_diary_remove_member(request: Request):
 
     ok = diary_remove_member(ctx["diary_id"], int(target_uid))
     return {"status": "ok" if ok else "error"}
+
+
+@fastapi_app.post("/api/diary/create_invite")
+async def api_create_invite(request: Request):
+    data = await request.json()
+    admin_id = data.get("admin_user_id")
+    if not admin_id:
+        return JSONResponse({"status": "error", "message": "admin_user_id required"}, status_code=400)
+    ctx = get_user_diary_context(int(admin_id))
+    if not ctx["is_diary_admin"] or ctx["diary_id"] is None:
+        return JSONResponse({"status": "error", "message": "Not a diary admin"}, status_code=403)
+    code = create_diary_invite(ctx["diary_id"])
+    bot_username = None
+    try:
+        bot_username = (await ptb_app.bot.get_me()).username if ptb_app else None
+    except Exception:
+        pass
+    link = f"https://t.me/{bot_username}?start=invite_{code}" if bot_username else None
+    return {"status": "ok", "code": code, "link": link}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
