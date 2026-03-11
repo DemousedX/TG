@@ -1051,8 +1051,36 @@ async def read_root():
 # 📡 API — USER CONTEXT
 # ─────────────────────────────────────────────────────────────────────────────
 @fastapi_app.get("/api/user_context")
-async def api_user_context(user_id: Optional[int] = None):
-    ctx = get_user_diary_context(user_id)
+async def api_user_context(user_id: Optional[int] = None, diary_id: Optional[int] = None):
+    is_super_admin = (user_id == DEFAULT_ADMIN_ID)
+
+    # Супер-адмін може переключатись між щоденниками через diary_id
+    if is_super_admin and diary_id is not None:
+        try:
+            with dbc() as c:
+                row = c.execute(
+                    "SELECT id, name, grade, schedule_key FROM diaries WHERE id=%s",
+                    (diary_id,)
+                ).fetchone()
+            if row:
+                ctx = {
+                    "diary_id": int(row["id"]),
+                    "is_diary_admin": True,
+                    "grade": row["grade"],
+                    "schedule_key": row["schedule_key"] or "9",
+                    "name": row["name"],
+                }
+            else:
+                ctx = get_user_diary_context(user_id)
+        except Exception:
+            ctx = get_user_diary_context(user_id)
+    else:
+        ctx = get_user_diary_context(user_id)
+
+    # Якщо супер-адмін без diary_id → показуємо 11 клас (diary_id=None)
+    if is_super_admin and diary_id is None:
+        ctx["is_diary_admin"] = True
+
     schedule_key = ctx["schedule_key"]
     today = today_kyiv()
     if schedule_key == "9":
@@ -1063,14 +1091,46 @@ async def api_user_context(user_id: Optional[int] = None):
     if schedule_key == "9":
         mix = resolve_mix_for_week(today)
         mix_info = mix or "Немає уроку"
+
+    # Знаходимо admin_id щоденника
+    diary_admin_id = None
+    if ctx["diary_id"] is not None:
+        try:
+            with dbc() as c:
+                row = c.execute(
+                    "SELECT user_id FROM diary_members WHERE diary_id=%s AND role='admin' LIMIT 1",
+                    (ctx["diary_id"],)
+                ).fetchone()
+                if row:
+                    diary_admin_id = int(row["user_id"])
+        except Exception:
+            pass
+    if diary_admin_id is None:
+        diary_admin_id = DEFAULT_ADMIN_ID
+
+    # Список усіх щоденників для супер-адміна
+    available_diaries = None
+    if is_super_admin:
+        try:
+            with dbc() as c:
+                rows = c.execute("SELECT id, name, grade FROM diaries ORDER BY id").fetchall()
+            available_diaries = [{"id": int(r["id"]), "name": r["name"], "grade": r["grade"]} for r in rows]
+            # Додаємо 11 клас як перший варіант (diary_id=null)
+            available_diaries = [{"id": None, "name": "11 клас", "grade": "11"}] + available_diaries
+        except Exception:
+            available_diaries = [{"id": None, "name": "11 клас", "grade": "11"}]
+
     return {
         "diary_id": ctx["diary_id"],
         "is_diary_admin": ctx["is_diary_admin"],
+        "is_super_admin": is_super_admin,
+        "diary_admin_id": diary_admin_id,
         "grade": ctx["grade"],
         "schedule_key": schedule_key,
         "name": ctx["name"],
         "schedule": schedule,
         "mix_info": mix_info,
+        "available_diaries": available_diaries,
     }
 
 
