@@ -716,10 +716,11 @@
         let userContext = {
             diary_id: null,
             is_diary_admin: false,
+            diary_admin_id: null,
             grade: '11',
             schedule_key: '11',
             name: '11 клас',
-            schedule: null,  // заповниться з /api/user_context
+            schedule: null,
         };
 
         // Ці значення динамічні — оновлюються після fetchUserContext()
@@ -765,7 +766,14 @@
             const grade = ctx.grade || '11';
             const badge = document.createElement('div');
             badge.className = 'diary-badge';
-            badge.innerHTML = `📓 ${escapeHTML(ctx.name || (grade + ' клас'))}`;
+
+            if (ctx.is_super_admin && ctx.available_diaries && ctx.available_diaries.length > 1) {
+                badge.innerHTML = `📓 ${escapeHTML(ctx.name || (grade + ' клас'))} <span style="opacity:.7;font-size:10px;margin-left:2px;">▼</span>`;
+                badge.style.cursor = 'pointer';
+                badge.onclick = () => openDiarySwitcher(ctx.available_diaries, ctx.diary_id);
+            } else {
+                badge.innerHTML = `📓 ${escapeHTML(ctx.name || (grade + ' клас'))}`;
+            }
             wrap.appendChild(badge);
 
             // Show members dock button if diary admin
@@ -781,6 +789,9 @@
                     dock.appendChild(membersBtn);
                     mountIcon('ico-dock-members', ICONS.people);
                 }
+            } else {
+                const membersBtn = document.getElementById('dock-members-btn');
+                if (membersBtn) membersBtn.remove();
             }
 
             // Update intro sub text
@@ -788,10 +799,69 @@
             if (introSub) introSub.textContent = `Щоденник ${grade} класу 📚`;
         }
 
-        async function fetchUserContext() {
+        function openDiarySwitcher(diaries, currentDiaryId) {
+            playVibration('light');
+            // Видаляємо старий якщо є
+            const old = document.getElementById('diary-switcher-sheet');
+            if (old) old.remove();
+
+            const sheet = document.createElement('div');
+            sheet.id = 'diary-switcher-sheet';
+            sheet.style.cssText = `
+                position:fixed;bottom:0;left:0;right:0;z-index:9999;
+                background:rgba(28,28,30,.98);border-top:1px solid rgba(84,84,88,.6);
+                border-radius:18px 18px 0 0;padding:0 0 max(20px,env(safe-area-inset-bottom)) 0;
+                animation:slideUpFade .25s cubic-bezier(.25,1,.5,1) both;
+            `;
+
+            const title = document.createElement('div');
+            title.style.cssText = 'text-align:center;padding:14px 16px 10px;font-size:13px;font-weight:700;color:rgba(235,235,245,.5);letter-spacing:.5px;text-transform:uppercase;';
+            title.textContent = 'Обери щоденник';
+            sheet.appendChild(title);
+
+            diaries.forEach(d => {
+                const isActive = (d.id === null && currentDiaryId === null) || (d.id !== null && d.id == currentDiaryId);
+                const row = document.createElement('div');
+                row.style.cssText = `
+                    display:flex;align-items:center;justify-content:space-between;
+                    padding:14px 20px;font-size:16px;font-weight:${isActive?'700':'500'};
+                    color:${isActive?'var(--accent)':'var(--text)'};cursor:pointer;
+                    border-top:1px solid rgba(84,84,88,.25);
+                `;
+                row.innerHTML = `<span>📓 ${escapeHTML(d.name)}</span>${isActive ? '<span style="color:var(--accent);font-size:18px;">✓</span>' : ''}`;
+                row.onclick = async () => {
+                    sheet.remove();
+                    if (isActive) return;
+                    playVibration('medium');
+                    showLoading('Переключення…', d.name);
+                    await fetchUserContext(d.id);
+                    await fetchHW({ silent: false, showOverlay: false });
+                    hideLoading();
+                };
+                sheet.appendChild(row);
+            });
+
+            // Cancel button
+            const cancel = document.createElement('div');
+            cancel.style.cssText = 'text-align:center;padding:16px;font-size:16px;color:rgba(235,235,245,.5);cursor:pointer;font-weight:600;';
+            cancel.textContent = 'Скасувати';
+            cancel.onclick = () => { playVibration('light'); sheet.remove(); };
+            sheet.appendChild(cancel);
+
+            // Tap outside to close
+            const backdrop = document.createElement('div');
+            backdrop.style.cssText = 'position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.4);';
+            backdrop.onclick = () => { sheet.remove(); backdrop.remove(); };
+            document.body.appendChild(backdrop);
+            document.body.appendChild(sheet);
+        }
+
+        async function fetchUserContext(switchDiaryId) {
             if (!currentUserId) return;
             try {
-                const res = await fetch(`/api/user_context?user_id=${currentUserId}`);
+                let url = `/api/user_context?user_id=${currentUserId}`;
+                if (switchDiaryId !== undefined) url += `&diary_id=${switchDiaryId === null ? '' : switchDiaryId}`;
+                const res = await fetch(url);
                 const ctx = await res.json();
                 applyUserContext(ctx);
             } catch (e) {
@@ -1064,10 +1134,11 @@
             document.getElementById('modal-desc').innerText = task.description;
             renderLinks(task.description || '', document.getElementById('modal-links'));
             document.getElementById('modal-datechip').textContent = task.date ? `📅 ${prettyDate(task.date)}` : '📅 —';
-            const isAuthorAdmin = task.author_id != null && Number(task.author_id) === (currentUserId || -1) && isAdmin;
+            const diaryAdminId = userContext.diary_admin_id ?? null;
+            const isAuthorAdmin = task.author_id != null && diaryAdminId != null && Number(task.author_id) === Number(diaryAdminId);
             const authorChip = document.getElementById('modal-authorchip');
             const authorName = task.author || "—";
-            authorChip.innerHTML = isAdmin && task.author_id == currentUserId
+            authorChip.innerHTML = isAuthorAdmin
                 ? `<span class="admin-badge" style="margin-right:6px;animation:none;">ADMIN</span>${escapeHTML(authorName)}`
                 : `👤 ${escapeHTML(authorName)}`;
             document.getElementById('admin-actions').style.display = isAdmin ? 'flex' : 'none';
